@@ -22,6 +22,8 @@ const DOW = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const CLOTHS = ['#c8401c', '#2348c4', '#0f6e52', '#d79a00', '#6a2fc0', '#1c1c1c', '#b3195a', '#21798c', '#5b4636'];
 const MIN_SUMMARY = 40;
 const CROP = 260;
+// SHA-256 do e-mail da dona do site: só essa conta vê a parte da IA. O e-mail em si não fica no código público.
+const OWNER_HASH = 'a4b94414cce6c351b7119ced1c2e734b12060551f8f7eed1b30d90ad0aac62db';
 
 const STATUS = { quero: 'Quero ler', lendo: 'Lendo', resumo: 'Falta o resumo', concluido: 'Lido' };
 const SHELVES = { resumo: 'Falta o resumo', lendo: 'Lendo', concluido: 'Lidos', quero: 'Quero ler', busca: 'Resultado da busca' };
@@ -52,6 +54,9 @@ const S = {
   busy: {},
   keyStatus: null,
   profileTried: false,
+  // sem nuvem o site é de uma pessoa só, então a IA fica liberada
+  isOwner: !cloudAvailable,
+  ownerChecked: '',
 };
 
 function readPref(k, d) { try { return localStorage.getItem(`exlibris:${k}`) || d; } catch (e) { return d; } }
@@ -149,8 +154,27 @@ const pct = (b) => (b.pages ? Math.min(100, Math.round(((b.pagesRead || 0) / b.p
 const level = (p, goal) => (!p ? 0 : p < goal * 0.5 ? 1 : p < goal ? 2 : p < goal * 1.5 ? 3 : 4);
 
 /* ================= store ================= */
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function checkOwner() {
+  if (!cloudAvailable) return;
+  const email = ((S.user && S.user.email) || '').trim().toLowerCase();
+  if (email === S.ownerChecked) return;
+  S.ownerChecked = email;
+  if (!email) { S.isOwner = false; return; }
+  sha256(email).then((h) => {
+    if (S.ownerChecked !== email) return;
+    S.isOwner = h === OWNER_HASH;
+    if (S.isOwner) renderView();
+  }).catch(() => { S.isOwner = false; });
+}
+
 const store = new Store((st) => {
   Object.assign(S, st);
+  checkOwner();
   if (needsLogin() && S.modal) S.modal = null;
   renderChrome();
   renderView();
@@ -924,7 +948,7 @@ function viewDescobrir() {
   const done = allBooks().filter((b) => b.status === 'concluido').sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
   const hasKey = !!S.settings.geminiKey;
   const top = `<header class="page-top"><h1>O que ler depois</h1><button type="button" class="btn btn-ink" data-action="rec-request" data-id="geral" ${S.busy.geral ? 'disabled' : ''}>${ICON.refresh}<span>Sugerir olhando a estante toda</span></button></header>
-    ${!hasKey ? '<p class="notice">Sem a chave da IA, as sugestões vêm do histórico da sua estante. <a href="#leitor">Ligar a IA</a></p>' : ''}`;
+    ${!hasKey && S.isOwner ? '<p class="notice">Sem a chave da IA, as sugestões vêm do histórico da sua estante. <a href="#leitor">Ligar a IA</a></p>' : ''}`;
   let general = '';
   if (S.busy.geral) general = `<section class="block">${loadingHTML('Olhando a estante inteira')}</section>`;
   else if (S.settings.generalRecs) general = `<section class="block">${recsHTML(S.settings.generalRecs, 'geral', 'Pra você, olhando tudo')}</section>`;
@@ -1004,7 +1028,7 @@ function viewLeitor() {
 
   return `${head}${nums}
     <div class="two-col">
-      <section class="block"><h2 class="h2">Que leitor você é</h2>${perfil}</section>
+      ${S.isOwner || (p && p.perfil) ? `<section class="block"><h2 class="h2">Que leitor você é</h2>${perfil}</section>` : ''}
       <section class="block"><h2 class="h2">Terminados em ${year}</h2><div class="chart">${monthChart(done, year)}</div>${genres}</section>
     </div>
     ${settingsHTML()}`;
@@ -1047,13 +1071,13 @@ function settingsHTML() {
     <div class="set"><h3 class="h4">Meta diária</h3>
       <div class="stepper"><button type="button" data-action="goal" data-d="-5" aria-label="Diminuir meta">−</button><span>${s.goal || 20} páginas</span><button type="button" data-action="goal" data-d="5" aria-label="Aumentar meta">+</button></div>
     </div>
-    <div class="set"><h3 class="h4">IA (Gemini, do Google)</h3>
+    ${S.isOwner ? `<div class="set"><h3 class="h4">IA (Gemini, do Google)</h3>
       <p>É ela que lê seus resumos e escolhe o próximo livro. O plano gratuito não pede cartão.</p>
       ${s.geminiKey ? '' : '<p class="small muted">Pegue a chave em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (botão “Create API key”) e cole aqui.</p>'}
       <form class="form inline" data-submit="save-key"><input id="set-key" type="password" autocomplete="off" placeholder="${s.geminiKey ? 'cole outra chave pra trocar' : 'cole a chave aqui'}" aria-label="Chave da IA"><button class="btn btn-sm btn-ink" type="submit" ${ks && ks.state === 'testing' ? 'disabled' : ''}>Salvar e testar</button>${s.geminiKey ? '<button type="button" class="btn btn-sm btn-ghost danger" data-action="remove-key">Remover</button>' : ''}</form>
       ${keyState}
       <p class="small muted">A chave fica ${cloudAvailable ? 'na sua conta, que só você acessa' : 'só neste navegador'}. Ela não vai pro código do site.</p>
-    </div>
+    </div>` : ''}
     <div class="set"><h3 class="h4">Conta</h3>${sync}</div>
     <div class="set"><h3 class="h4">Tema</h3>
       <div class="status-switch">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => `<button type="button" class="${theme === k ? 'on' : ''}" data-action="theme" data-t="${k}">${l}</button>`).join('')}</div>
