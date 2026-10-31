@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   profile: null,
   generalRecs: null,
   readerName: '',
+  photo: '',
 };
 
 export const cloudAvailable = !!(firebaseConfig && firebaseConfig.apiKey);
@@ -54,6 +55,8 @@ export class Store {
     this.unsubs = [];
     this.loaded = { books: true, logs: true, settings: true };
     this.authError = '';
+    // sem nuvem não há login a esperar
+    this.authKnown = !cloudAvailable;
   }
 
   emit() {
@@ -65,6 +68,7 @@ export class Store {
       mode: this.mode,
       user: this.user ? { name: this.user.displayName || '', email: this.user.email || '', photo: this.user.photoURL || '' } : null,
       ready,
+      authKnown: this.authKnown,
       authError: this.authError,
     });
   }
@@ -76,7 +80,8 @@ export class Store {
       await this.initFirebase();
     } catch (e) {
       console.error(e);
-      this.authError = 'Não foi possível conectar à nuvem agora. Seus dados continuam neste aparelho.';
+      this.authError = 'Não deu pra conectar com a nuvem agora. Confira a internet e recarregue a página.';
+      this.authKnown = true;
       this.emit();
     }
   }
@@ -108,6 +113,7 @@ export class Store {
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
     this.user = user;
+    this.authKnown = true;
     if (!user) {
       this.mode = 'local';
       this.data = readLocal();

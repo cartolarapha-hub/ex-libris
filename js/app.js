@@ -18,37 +18,32 @@ const hashStr = (s) => { let h = 7; for (const c of s || '') h = (h * 31 + c.cha
 const authorsOf = (b) => (b.authors || []).join(', ');
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const MONTHS_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const DOW = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-const CLOTHS = ['#6b2232', '#1f3a4d', '#2f4a2c', '#7a5520', '#4a2848', '#3a3631', '#5b2a1a', '#24443f', '#2b2f52'];
+const DOW = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const CLOTHS = ['#c8401c', '#2348c4', '#0f6e52', '#d79a00', '#6a2fc0', '#1c1c1c', '#b3195a', '#21798c', '#5b4636'];
 const MIN_SUMMARY = 40;
+const CROP = 260;
 
 const STATUS = { quero: 'Quero ler', lendo: 'Lendo', resumo: 'Falta o resumo', concluido: 'Lido' };
-const SHELVES = {
-  resumo: { title: 'Falta o resumo', hint: 'só contam como lidos depois do resumo' },
-  lendo: { title: 'Lendo', hint: 'na mesa de leitura' },
-  concluido: { title: 'Lidos', hint: 'toque na capa para reler seu resumo' },
-  quero: { title: 'Quero ler', hint: 'a fila de espera' },
-};
+const SHELVES = { resumo: 'Falta o resumo', lendo: 'Lendo', concluido: 'Lidos', quero: 'Quero ler', busca: 'Resultado da busca' };
 
 const ICON = {
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
   trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
-  flame: '<svg class="flame-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1.2 4.3 5.5 5.8 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.7 1.6-4.3 2.7-5.4.3 2.1 1.4 3.2 2.7 3.2 0-3.2-1.1-5.3.1-8.4z" style="fill:currentColor;fill-opacity:.18"/></svg>',
-  quill: '<svg class="quill" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5C13 4.5 8 9.5 6.5 17.5M20.5 3.5c-1.5 6-5.5 10-11 11.5M6.5 17.5L4 21M9.5 12.5l3 1"/></svg>',
   left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
   right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg>',
   plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v9H4zM13 4h7v9h-7zM4 15h7v5H4zM13 15h7v5h-7z"/></svg>',
+  spines: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h3v15H4zM9 8h3v12H9zM14 4h3v16h-3zM19 9h2v11h-2z"/></svg>',
 };
-
-const WAX_PATH = 'M32 3c4 3 7 1 10 4s2 6 6 8 6 3 6 8-3 5-2 9 3 6 0 10-6 3-8 6-3 7-8 7-6-3-9-3-6 3-10 1-3-6-6-8-6-3-6-8 3-6 2-10-3-6 0-10 6-3 8-6 3-6 9-6 4 0 8-2z';
 
 /* ================= estado ================= */
 const today = () => ymd();
 const now = new Date();
 const S = {
-  books: {}, logs: {}, settings: {}, mode: 'local', user: null, ready: false, authError: '',
+  books: {}, logs: {}, settings: {}, mode: 'local', user: null, ready: false, authKnown: false, authError: '',
   view: 'estante',
   filter: 'todos', search: '', genre: '', sort: 'recentes',
   shelfMode: readPref('shelfMode', 'capas'),
@@ -64,6 +59,8 @@ function writePref(k, v) { try { localStorage.setItem(`exlibris:${k}`, v); } cat
 
 const allBooks = () => Object.values(S.books);
 const logsOf = (id) => Object.values(S.logs).filter((l) => l.bookId === id).sort((a, b) => (b.date + b.at).localeCompare(a.date + a.at));
+// Com a nuvem ligada, só quem entrou na conta mexe na estante.
+const needsLogin = () => cloudAvailable && !S.user;
 
 /* ================= capas ================= */
 window.__coverErr = (img) => {
@@ -80,10 +77,10 @@ window.__coverLoad = (img) => { if (img.naturalWidth && img.naturalWidth < 40) w
 
 function coverHTML(b, extra = '') {
   const color = CLOTHS[hashStr(b.title + authorsOf(b)) % CLOTHS.length];
-  const cloth = `<span class="cloth" style="--cloth:${color}"><span class="cloth-title">${esc(b.title)}</span><span class="cloth-rule"></span><span class="cloth-author">${esc((b.authors || [])[0] || '')}</span></span>`;
-  if (!b.cover) return `<span class="cover cover-fallback ${extra}">${cloth}</span>`;
+  const plain = `<span class="plain" style="--c:${color}"><span class="plain-title">${esc(b.title)}</span><span class="plain-author">${esc((b.authors || [])[0] || '')}</span></span>`;
+  if (!b.cover) return `<span class="cover cover-fallback ${extra}">${plain}</span>`;
   const alts = (b.coverAlts || []).filter((c) => c && c !== b.cover).join('|');
-  return `<span class="cover ${extra}"><img src="${esc(b.cover)}" data-alts="${esc(alts)}" alt="Capa de ${esc(b.title)}" loading="lazy" referrerpolicy="no-referrer" onload="__coverLoad(this)" onerror="__coverErr(this)">${cloth}</span>`;
+  return `<span class="cover ${extra}"><img src="${esc(b.cover)}" data-alts="${esc(alts)}" alt="Capa de ${esc(b.title)}" loading="lazy" referrerpolicy="no-referrer" onload="__coverLoad(this)" onerror="__coverErr(this)">${plain}</span>`;
 }
 
 function stars(n, cls = 'stars') {
@@ -101,6 +98,14 @@ function callNumber(b) {
   const sur = ((b.authors || [])[0] || 'Anon').trim().split(/\s+/).pop().normalize('NFD').replace(/[̀-ͯ]/g, '').slice(0, 3).toUpperCase();
   const t = (b.title || '').replace(/^(o|a|os|as|the|um|uma)\s+/i, '').charAt(0).toLowerCase();
   return `${code} ${sur} ${t}`;
+}
+
+function avatarHTML(cls = '') {
+  const src = S.settings.photo || (S.user && S.user.photo) || '';
+  if (src) return `<span class="avatar ${cls}"><img src="${esc(src)}" alt="" referrerpolicy="no-referrer"></span>`;
+  const n = readerName() || (S.user && S.user.email) || '?';
+  const ini = n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  return `<span class="avatar initials ${cls}">${esc(ini)}</span>`;
 }
 
 /* ================= ritmo, sequência ================= */
@@ -146,9 +151,11 @@ const level = (p, goal) => (!p ? 0 : p < goal * 0.5 ? 1 : p < goal ? 2 : p < goa
 /* ================= store ================= */
 const store = new Store((st) => {
   Object.assign(S, st);
+  if (needsLogin() && S.modal) S.modal = null;
   renderChrome();
   renderView();
   if (S.modal && S.modal.type === 'book' && !fieldFocused()) renderModal();
+  if (!S.modal) renderModal();
 });
 
 function fieldFocused() {
@@ -162,22 +169,18 @@ function readerName() {
 }
 
 function renderChrome() {
-  $$('.tabs a').forEach((a) => {
+  const gated = !S.authKnown || needsLogin();
+  document.body.classList.toggle('gated', gated);
+  $$('#nav a').forEach((a) => {
     const on = a.dataset.view === S.view;
     a.classList.toggle('active', on);
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  const name = readerName().split(' ')[0];
-  $('#brand-sub').textContent = name ? `biblioteca de ${name}` : 'biblioteca particular';
-  const chip = $('#sync-chip');
-  chip.hidden = false;
-  if (!cloudAvailable) {
-    chip.outerHTML = '<span id="sync-chip" class="sync-chip" title="Os dados ficam salvos neste navegador">só neste aparelho</span>';
-  } else if (S.user) {
-    chip.outerHTML = '<span id="sync-chip" class="sync-chip" title="Sincronizado com sua conta Google">sincronizado</span>';
-  } else {
-    chip.outerHTML = '<button id="sync-chip" class="sync-chip" type="button" data-action="login">entrar para sincronizar</button>';
-  }
+  let end = '';
+  if (!S.authKnown) end = '';
+  else if (needsLogin()) end = '<button type="button" class="btn btn-ink btn-sm" data-action="login">Entrar</button>';
+  else end = `<button type="button" class="btn btn-accent btn-add" data-action="add-book" title="Adicionar livro (atalho: N)">${ICON.plus}<span>Adicionar livro</span></button><a class="me" href="#leitor" aria-label="Seu perfil">${avatarHTML('sm')}</a>`;
+  $('#topbar-end').innerHTML = end;
 }
 
 const VIEWS = ['estante', 'calendario', 'descobrir', 'leitor'];
@@ -196,10 +199,9 @@ function renderView() {
   const a = document.activeElement;
   const keepId = a && a.id && v.contains(a) ? a.id : null;
   const caret = keepId && typeof a.selectionStart === 'number' ? a.selectionStart : null;
-  if (!S.ready) {
-    v.innerHTML = loadingHTML('Abrindo a biblioteca…');
-    return;
-  }
+  if (!S.authKnown) { v.innerHTML = loadingHTML(); return; }
+  if (needsLogin()) { v.innerHTML = viewLanding(); return; }
+  if (!S.ready) { v.innerHTML = loadingHTML(); return; }
   const fn = { estante: viewEstante, calendario: viewCalendario, descobrir: viewDescobrir, leitor: viewLeitor }[S.view];
   v.innerHTML = fn();
   if (keepId) {
@@ -212,61 +214,89 @@ function renderView() {
   if (S.view === 'leitor') maybeAutoProfile();
 }
 
-function loadingHTML(msg) {
-  return `<div class="loading-box">${ICON.quill}<p>${esc(msg)}</p></div>`;
+function loadingHTML(msg = '') {
+  return `<div class="loading"><span class="flip" aria-hidden="true"><i></i><i></i><i></i></span>${msg ? `<p>${esc(msg)}</p>` : ''}</div>`;
 }
 
 function bannersHTML() {
-  const out = [];
-  if (S.authError) out.push(`<div class="banner warn"><p>${esc(S.authError)}</p></div>`);
-  if (cloudAvailable && !S.user) {
-    out.push('<div class="banner"><p>Entre com sua conta Google para abrir esta mesma estante no celular e no computador.</p><button class="btn btn-sm btn-ink" data-action="login">Entrar com Google</button></div>');
-  }
-  return out.join('');
+  return S.authError ? `<p class="notice">${esc(S.authError)}</p>` : '';
+}
+
+/* ================= ENTRADA (sem login) ================= */
+function viewLanding() {
+  const demo = [
+    ['Grande Sertão: Veredas', 230], ['Torto Arado', 170], ['A Hora da Estrela', 120], ['Cem Anos de Solidão', 210],
+    ['Dom Casmurro', 160], ['O Avesso da Pele', 180], ['Vidas Secas', 130], ['Ensaio sobre a Cegueira', 200],
+    ['Quarto de Despejo', 150], ['Capitães da Areia', 175], ['Memórias Póstumas', 190],
+  ];
+  const spines = demo.map(([t, h], i) => `<span class="spine demo" style="--c:${CLOTHS[i % CLOTHS.length]};--w:${30 + (hashStr(t) % 22)}px;--h:${h}px"><span>${esc(t)}</span></span>`).join('');
+  return `<section class="landing">
+    <div class="landing-copy">
+      <h1>ex libris<span class="wm-dot">.</span></h1>
+      <p class="landing-lead">Quer dizer <mark>“dos livros de”</mark>. É o carimbo que se põe no livro pra dizer de quem ele é.</p>
+      <p>Aqui fica a sua estante: o que você está lendo, quantas páginas leu por dia, o resumo de cada livro que terminou e o que ler depois.</p>
+      <div class="landing-cta">
+        <button type="button" class="btn btn-ink btn-lg" data-action="login">Entrar com Google</button>
+        <span class="small">Cada conta vê só a própria estante.</span>
+      </div>
+      ${bannersHTML()}
+    </div>
+    <div class="landing-shelf" aria-hidden="true"><div class="spine-row">${spines}</div></div>
+  </section>`;
 }
 
 /* ================= ESTANTE ================= */
-function perRow() {
-  const w = Math.min(window.innerWidth, 1180);
-  if (w >= 1100) return 8;
-  if (w >= 900) return 6;
-  if (w >= 680) return 5;
-  if (w >= 470) return 4;
-  return 3;
+function greeting() {
+  const h = new Date().getHours();
+  const hi = h < 5 ? 'Boa noite' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const name = readerName().split(' ')[0];
+  return name ? `${hi}, ${esc(name.charAt(0).toUpperCase() + name.slice(1))}.` : `${hi}.`;
 }
 
 function viewEstante() {
   const all = allBooks();
   const c = (st) => all.filter((b) => b.status === st).length;
-  const lede = all.length
-    ? `${plural(c('concluido'), 'lido', 'lidos')}, ${plural(c('lendo'), 'na mesa', 'na mesa')} e ${plural(c('quero'), 'esperando a vez', 'esperando a vez')}.${c('resumo') ? ` ${plural(c('resumo'), 'resumo pendente', 'resumos pendentes')}.` : ''}`
-    : 'Cada livro que você lê ganha uma ficha, um resumo e uma sugestão do que ler depois.';
-  const head = `<div class="page-head"><div><span class="eyebrow">Acervo particular · ${plural(all.length, 'volume', 'volumes')}</span><h1>A <em>estante</em></h1><p class="lede">${lede}</p></div></div>`;
+  const year = String(new Date().getFullYear());
+  const doneYear = all.filter((b) => b.status === 'concluido' && (b.endDate || '').startsWith(year)).length;
+  const bits = [];
+  if (c('lendo')) bits.push(`<b>${c('lendo')}</b> lendo`);
+  bits.push(`<b>${doneYear}</b> ${doneYear === 1 ? 'lido' : 'lidos'} em ${year}`);
+  if (c('quero')) bits.push(`<b>${c('quero')}</b> na fila`);
+  if (c('resumo')) bits.push(`<b class="hl">${c('resumo')}</b> sem resumo`);
+  const head = `<header class="hello"><h1>${greeting()}</h1>${all.length ? `<p class="tally">${bits.join('<span class="sep">/</span>')}</p>` : ''}</header>`;
   if (!all.length) {
-    return `${head}${bannersHTML()}<div class="empty">${ICON.quill}<h3>Uma estante esperando o primeiro volume</h3><p>Digite o título e o autor: a capa, o número de páginas e a sinopse vêm sozinhos. Depois é só ler, registrar as páginas no calendário e escrever o resumo.</p><button class="btn btn-gold" data-action="add-book">Catalogar o primeiro livro</button></div>`;
+    const ghosts = Array.from({ length: 5 }, () => '<span class="ghost-book" aria-hidden="true"></span>').join('');
+    return `${head}${bannersHTML()}
+      <p class="lead-empty">Sua estante está vazia. Comece pelo livro que está na sua cabeceira.</p>
+      <div class="cover-grid empty-grid"><button type="button" class="ghost-book add" data-action="add-book">${ICON.plus}<span>Adicionar o primeiro livro</span></button>${ghosts}</div>`;
   }
   const reading = all.filter((b) => b.status === 'lendo').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const mesa = reading.length
-    ? `<h2 class="section-title">Na mesa de leitura <small>${reading.length}</small></h2><div class="now-reading">${reading.map(readingCard).join('')}</div>`
+    ? `<section class="block"><h2 class="h2">Lendo agora</h2><div class="now">${reading.map(readingCard).join('')}</div></section>`
     : '';
-  return `${head}${bannersHTML()}${mesa}${toolbarHTML(all)}<div id="shelves">${shelvesHTML()}</div>`;
+  return `${head}${bannersHTML()}${mesa}<section class="block">${toolbarHTML(all)}<div id="shelves">${shelvesHTML()}</div></section>`;
 }
 
 function readingCard(b) {
   const p = pct(b);
   const r = rhythm(b);
-  const eta = r && r.eta ? `<span class="muted" style="font-size:.92rem;font-style:italic">No seu ritmo, termina por volta de ${fmtDate(r.eta, { day: 'numeric', month: 'long' })}.</span>` : '';
-  return `<article class="reading-card">
-    <div role="button" tabindex="0" data-action="open-book" data-id="${b.id}" aria-label="Abrir ${esc(b.title)}">${coverHTML(b)}</div>
-    <div class="info">
+  const eta = r && r.eta ? `termina lá por ${fmtDate(r.eta, { day: 'numeric', month: 'short' })}` : (r ? `${Math.round(r.perDay)} pág. por dia` : '');
+  const slider = b.pages
+    ? `<label class="page-slider" style="--p:${p}%">
+        <span class="ps-read"><output id="pg-${b.id}">${b.pagesRead || 0}</output> <span>de ${b.pages}</span></span>
+        <input type="range" min="0" max="${b.pages}" step="1" value="${b.pagesRead || 0}" data-range="${b.id}" aria-label="Página onde você parou em ${esc(b.title)}">
+      </label>
+      <span class="ps-hint">arraste até a página onde parou${eta ? ` · ${eta}` : ''}</span>`
+    : `<button type="button" class="link" data-action="open-book" data-id="${b.id}" data-tab="progresso">Quantas páginas ele tem?</button>`;
+  return `<article class="now-card">
+    <button type="button" class="now-cover" data-action="open-book" data-id="${b.id}" aria-label="Abrir ${esc(b.title)}">${coverHTML(b)}</button>
+    <div class="now-info">
       <h3>${esc(b.title)}</h3>
-      <span class="author">${esc(authorsOf(b))}</span>
-      <div class="progress" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><i style="width:${p}%"></i></div>
-      <div class="progress-meta"><span>pág. ${b.pagesRead || 0} de ${b.pages || '?'}</span><span>${p}%</span></div>
-      ${eta}
+      <span class="by">${esc(authorsOf(b))}</span>
+      ${slider}
       <div class="row">
-        <button class="btn btn-sm btn-ink" type="button" data-action="open-log" data-id="${b.id}">${ICON.plus}<span>Páginas</span></button>
-        <button class="btn btn-sm btn-ghost" type="button" data-action="open-book" data-id="${b.id}" data-tab="resumo">Concluir</button>
+        <button type="button" class="btn btn-sm" data-action="open-log" data-id="${b.id}">${ICON.plus}<span>Páginas de outro dia</span></button>
+        <button type="button" class="btn btn-sm btn-ghost" data-action="open-book" data-id="${b.id}" data-tab="resumo">Terminei</button>
       </div>
     </div>
   </article>`;
@@ -274,21 +304,23 @@ function readingCard(b) {
 
 function toolbarHTML(all) {
   const count = (st) => all.filter((b) => b.status === st).length;
-  const chips = [['todos', 'Todos', all.length], ['lendo', 'Lendo', count('lendo')], ['resumo', 'Falta o resumo', count('resumo')], ['concluido', 'Lidos', count('concluido')], ['quero', 'Quero ler', count('quero')]]
-    .filter(([k, , n]) => k !== 'resumo' || n)
-    .map(([k, label, n]) => `<button type="button" class="chip ${S.filter === k ? 'on' : ''}" data-action="filter" data-f="${k}">${label}<span class="n">${n}</span></button>`)
+  const tabs = [['todos', 'Tudo', all.length], ['lendo', 'Lendo', count('lendo')], ['resumo', 'Falta resumo', count('resumo')], ['concluido', 'Lidos', count('concluido')], ['quero', 'Quero ler', count('quero')]]
+    .filter(([k, , n]) => k === 'todos' || n)
+    .map(([k, label, n]) => `<button type="button" class="ftab ${S.filter === k ? 'on' : ''}" data-action="filter" data-f="${k}">${label}<sup>${n}</sup></button>`)
     .join('');
   const genres = [...new Set(all.map((b) => b.genre).filter(Boolean))].sort();
   return `<div class="toolbar">
-    <label class="search">${ICON.search}<input id="shelf-search" type="search" placeholder="Procurar por título ou autor" value="${esc(S.search)}" data-input="search" aria-label="Procurar na estante"></label>
-    <div class="chips">${chips}</div>
-    <select class="select" data-change="genre" aria-label="Filtrar por gênero"><option value="">Todos os gêneros</option>${genres.map((g) => `<option ${S.genre === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
-    <select class="select" data-change="sort" aria-label="Ordenar">
-      ${[['recentes', 'Mais recentes'], ['titulo', 'Título'], ['autor', 'Autor'], ['nota', 'Nota'], ['paginas', 'Páginas']].map(([k, l]) => `<option value="${k}" ${S.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
-    </select>
-    <div class="seg" role="group" aria-label="Modo da estante">
-      <button type="button" class="${S.shelfMode === 'capas' ? 'on' : ''}" data-action="shelf-mode" data-m="capas">Capas</button>
-      <button type="button" class="${S.shelfMode === 'lombadas' ? 'on' : ''}" data-action="shelf-mode" data-m="lombadas">Lombadas</button>
+    <div class="ftabs" role="group" aria-label="Filtrar por situação">${tabs}</div>
+    <div class="tools">
+      <label class="search">${ICON.search}<input id="shelf-search" type="search" placeholder="Buscar título ou autor" value="${esc(S.search)}" data-input="search" aria-label="Buscar na estante"></label>
+      ${genres.length > 1 ? `<select class="select" data-change="genre" aria-label="Gênero"><option value="">Gênero</option>${genres.map((g) => `<option ${S.genre === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>` : ''}
+      <select class="select" data-change="sort" aria-label="Ordenar">
+        ${[['recentes', 'Recentes'], ['titulo', 'Título'], ['autor', 'Autor'], ['nota', 'Nota'], ['paginas', 'Páginas']].map(([k, l]) => `<option value="${k}" ${S.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <div class="toggle" role="group" aria-label="Como mostrar">
+        <button type="button" class="${S.shelfMode === 'capas' ? 'on' : ''}" data-action="shelf-mode" data-m="capas" aria-label="Capas" title="Capas">${ICON.grid}</button>
+        <button type="button" class="${S.shelfMode === 'lombadas' ? 'on' : ''}" data-action="shelf-mode" data-m="lombadas" aria-label="Lombadas" title="Lombadas">${ICON.spines}</button>
+      </div>
     </div>
   </div>`;
 }
@@ -311,7 +343,7 @@ function filteredBooks() {
 
 function shelvesHTML() {
   const list = filteredBooks();
-  if (!list.length) return '<div class="empty"><h3>Nada nesta prateleira</h3><p>Nenhum livro combina com essa busca ou filtro.</p></div>';
+  if (!list.length) return '<p class="muted pad">Nada por aqui com esse filtro.</p>';
   let groups;
   if (S.filter === 'todos' && !S.search && !S.genre) {
     groups = ['resumo', 'concluido', 'quero'].map((st) => [st, list.filter((b) => b.status === st)]).filter(([, l]) => l.length);
@@ -321,47 +353,40 @@ function shelvesHTML() {
   } else {
     groups = [[S.filter, list]];
   }
-  return groups.map(([st, l]) => shelfHTML(st, l)).join('');
+  const single = groups.length === 1 && S.filter !== 'todos';
+  return groups.map(([st, l]) => shelfHTML(st, l, single)).join('');
 }
 
-function chunk(arr, n) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
-  return out;
-}
-
-function shelfHTML(st, list) {
-  const meta = SHELVES[st] || { title: 'Resultados', hint: '' };
-  const head = `<header class="shelf-head"><h2>${meta.title}</h2><span class="label-plate">${list.length}</span><span class="hint">${meta.hint}</span></header>`;
+function shelfHTML(st, list, noHead) {
+  const head = noHead ? '' : `<h3 class="shelf-title">${SHELVES[st] || 'Livros'} <span>${list.length}</span></h3>`;
   if (S.shelfMode === 'lombadas') {
-    const per = Math.max(8, Math.floor((Math.min(window.innerWidth, 1180) - 60) / 40));
-    return `<section class="shelf">${head}${chunk(list, per).map((row) => `<div class="spine-row">${row.map(spineHTML).join('')}</div><div class="plank"></div>`).join('')}</section>`;
+    return `<div class="shelf">${head}<div class="spine-row">${list.map(spineHTML).join('')}</div></div>`;
   }
-  const n = perRow();
-  return `<section class="shelf">${head}${chunk(list, n).map((row) => `<div class="shelf-row" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${row.map(tileHTML).join('')}</div><div class="plank"></div>`).join('')}</section>`;
+  return `<div class="shelf">${head}<div class="cover-grid">${list.map(tileHTML).join('')}</div></div>`;
 }
 
 function tileHTML(b) {
   let extra = '';
-  if (b.status === 'lendo') extra = `<span class="mini-progress"><i style="width:${pct(b)}%"></i></span>`;
-  if (b.status === 'concluido') extra = stars(b.rating);
-  return `<button type="button" class="book-tile" data-action="open-book" data-id="${b.id}">
-    ${b.status === 'resumo' ? '<span class="tile-flag">resumo</span>' : ''}
+  if (b.status === 'lendo') extra = `<span class="mini-bar"><i style="width:${pct(b)}%"></i></span>`;
+  if (b.status === 'concluido' && b.rating) extra = stars(b.rating);
+  if (b.status === 'resumo') extra = '<span class="tag-hl">escrever resumo</span>';
+  return `<button type="button" class="tile" data-action="open-book" data-id="${b.id}">
     ${coverHTML(b)}
-    <span class="tile-cap"><span class="tile-title">${esc(b.title)}</span><span class="tile-author">${esc(authorsOf(b))}</span>${extra}</span>
+    <span class="tile-title">${esc(b.title)}</span>
+    <span class="tile-author">${esc(authorsOf(b))}</span>
+    ${extra}
   </button>`;
 }
 
-function spineHTML(b, i) {
+function spineHTML(b) {
   const h = hashStr(b.id);
   const color = CLOTHS[hashStr(b.title + authorsOf(b)) % CLOTHS.length];
-  const width = Math.max(26, Math.min(56, Math.round((b.pages || 250) / 14)));
-  const height = 150 + (h % 46);
-  const tilt = i > 0 && h % 9 === 0 ? 'tilt-l' : '';
-  return `<button type="button" class="spine ${tilt}" style="--c:${color};--w:${width}px;--h:${height}px" data-action="open-book" data-id="${b.id}" title="${esc(b.title)} — ${esc(authorsOf(b))}"><span>${esc(b.title)}</span></button>`;
+  const width = Math.max(30, Math.min(60, Math.round((b.pages || 250) / 9)));
+  const height = 150 + (h % 50);
+  return `<button type="button" class="spine" style="--c:${color};--w:${width}px;--h:${height}px" data-action="open-book" data-id="${b.id}" title="${esc(b.title)} — ${esc(authorsOf(b))}"><span>${esc(b.title)}</span></button>`;
 }
 
-/* ================= MODAL: ficha do livro ================= */
+/* ================= FICHA DO LIVRO ================= */
 function openBook(id, tab) {
   const b = S.books[id];
   if (!b) return;
@@ -377,9 +402,9 @@ function defaultTab(b) {
 
 function tabsFor(b) {
   if (b.status === 'quero') return [['ficha', 'Ficha']];
-  if (b.status === 'lendo') return [['progresso', 'Progresso'], ['resumo', 'Concluir'], ['ficha', 'Ficha']];
-  if (b.status === 'resumo') return [['resumo', 'Escrever resumo'], ['ficha', 'Ficha']];
-  return [['resumo', 'Meu resumo'], ['sugestao', 'Com base nessa leitura', 'special'], ['ficha', 'Ficha']];
+  if (b.status === 'lendo') return [['progresso', 'Progresso'], ['resumo', 'Terminar'], ['ficha', 'Ficha']];
+  if (b.status === 'resumo') return [['resumo', 'Resumo'], ['ficha', 'Ficha']];
+  return [['resumo', 'Meu resumo'], ['sugestao', 'Ler depois'], ['ficha', 'Ficha']];
 }
 
 function maybeAutoRecs() {
@@ -389,30 +414,36 @@ function maybeAutoRecs() {
   if (b && b.status === 'concluido' && !b.recs && !S.busy[b.id]) requestRecs(b.id);
 }
 
+function statusSwitch(b) {
+  const cur = b.status === 'resumo' || b.status === 'concluido' ? 'lido' : b.status;
+  return `<div class="status-switch" role="group" aria-label="Situação do livro">${[['quero', 'Quero ler'], ['lendo', 'Lendo'], ['lido', 'Lido']]
+    .map(([k, l]) => `<button type="button" class="${cur === k ? 'on' : ''}" data-action="status-set" data-s="${k}" aria-pressed="${cur === k}">${l}</button>`).join('')}</div>`;
+}
+
 function bookModalHTML() {
   const m = S.modal;
   const b = S.books[m.id];
   if (!b) return '';
   const tabs = tabsFor(b);
   if (!tabs.some(([k]) => k === m.tab)) m.tab = tabs[0][0];
-  let side = '';
-  if (b.status === 'lendo') {
-    side = `<div class="progress"><i style="width:${pct(b)}%"></i></div><div class="progress-meta"><span>pág. ${b.pagesRead || 0}/${b.pages || '?'}</span><span>${pct(b)}%</span></div>`;
-  } else if (b.status === 'concluido') {
+  let meta = '';
+  if (b.status === 'lendo' && b.pages) meta = `<span class="meta-line">página ${b.pagesRead || 0} de ${b.pages} · ${pct(b)}%</span>`;
+  else if (b.status === 'concluido') {
     const d = b.startDate && b.endDate ? daysBetween(b.startDate, b.endDate) + 1 : null;
-    side = `${stars(b.rating, 'big-stars')}<span class="type muted" style="font-size:.8rem">lido em ${fmtDate(b.endDate)}${d ? ` · ${plural(d, 'dia', 'dias')}` : ''}</span>`;
-  }
+    meta = `<span class="meta-line">${stars(b.rating)} lido em ${fmtDate(b.endDate)}${d ? ` · ${plural(d, 'dia', 'dias')}` : ''}</span>`;
+  } else if (b.status === 'resumo') meta = '<span class="meta-line"><span class="tag-hl">falta o resumo</span></span>';
   const pane = { ficha: fichaPane, progresso: progressPane, resumo: resumoPane, sugestao: sugestaoPane }[m.tab](b);
-  return `<div class="ficha">
-    <div class="ficha-side"><div class="cover-wrap tilt" data-tilt>${coverHTML(b)}</div><div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">${side}</div></div>
-    <div class="ficha-body">
-      <span class="status-pill st-${b.status}">${STATUS[b.status]}</span>
-      <h2>${esc(b.title)}</h2>
-      <p class="by">${esc(authorsOf(b))}${b.year ? `, ${esc(b.year)}` : ''}</p>
-      <div class="mtabs" role="tablist">${tabs.map(([k, label, cls]) => `<button type="button" role="tab" aria-selected="${m.tab === k}" class="${m.tab === k ? 'on' : ''} ${cls || ''}" data-action="book-tab" data-tab="${k}">${label}</button>`).join('')}</div>
-      <div class="tabpane">${pane}</div>
+  return `<div class="book-head">
+      <div class="book-cover" data-tilt>${coverHTML(b)}</div>
+      <div class="book-id">
+        <h2>${esc(b.title)}</h2>
+        <p class="by">${esc(authorsOf(b))}${b.year ? `, ${esc(b.year)}` : ''}</p>
+        ${meta}
+        ${statusSwitch(b)}
+      </div>
     </div>
-  </div>`;
+    ${tabs.length > 1 ? `<div class="utabs" role="tablist">${tabs.map(([k, label]) => `<button type="button" role="tab" aria-selected="${m.tab === k}" class="${m.tab === k ? 'on' : ''}" data-action="book-tab" data-tab="${k}">${label}</button>`).join('')}</div>` : ''}
+    <div class="pane">${pane}</div>`;
 }
 
 function fichaPane(b) {
@@ -420,80 +451,74 @@ function fichaPane(b) {
   if (m.editing) return editPane(b);
   const rows = [
     ['Autor', authorsOf(b) || '—'],
-    ['Título', b.title],
     ['Publicação', b.year || '—'],
     ['Páginas', b.pages || '—'],
     ['Gênero', b.genre || '—'],
-    ['Catalogado em', fmtDate(ymd(new Date(b.addedAt || Date.now())))],
+    ['Na estante desde', fmtDate(ymd(new Date(b.addedAt || Date.now())))],
   ];
-  if (b.startDate) rows.push(['Início', fmtDate(b.startDate)]);
-  if (b.endDate && b.status === 'concluido') rows.push(['Término', fmtDate(b.endDate)]);
-  const card = `<div class="catalog-card"><span class="callno">${esc(callNumber(b))}</span><dl style="margin:0">${rows.map(([k, v]) => `<div class="cc-row"><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>`;
+  if (b.startDate) rows.push(['Começou', fmtDate(b.startDate)]);
+  if (b.endDate && b.status === 'concluido') rows.push(['Terminou', fmtDate(b.endDate)]);
+  const card = `<div class="index-card"><span class="callno">${esc(callNumber(b))}</span><dl>${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>`;
   const syn = b.synopsis
-    ? `<div><p class="synopsis ${m.synOpen ? '' : 'clamp'}">${esc(b.synopsis)}</p>${b.synopsis.length > 320 ? `<button type="button" class="btn-link" data-action="toggle-syn">${m.synOpen ? 'recolher' : 'ler a sinopse inteira'}</button>` : ''}</div>`
+    ? `<div class="synopsis-wrap"><p class="synopsis ${m.synOpen ? '' : 'clamp'}">${esc(b.synopsis)}</p>${b.synopsis.length > 320 ? `<button type="button" class="link" data-action="toggle-syn">${m.synOpen ? 'menos' : 'ler a sinopse toda'}</button>` : ''}</div>`
     : '';
   const acts = [];
-  if (b.status === 'quero') acts.push('<button type="button" class="btn btn-ink" data-action="start-reading">Começar a ler</button>');
-  if (b.status === 'lendo') {
-    acts.push(`<button type="button" class="btn btn-ink" data-action="open-log" data-id="${b.id}">Registrar páginas</button>`);
-    acts.push('<button type="button" class="btn btn-ghost" data-action="book-tab" data-tab="resumo">Concluir leitura</button>');
-    acts.push('<button type="button" class="btn btn-ghost" data-action="back-to-quero">Voltar para Quero ler</button>');
-  }
-  if (b.status === 'resumo') acts.push('<button type="button" class="btn btn-ink" data-action="book-tab" data-tab="resumo">Escrever o resumo</button>');
+  if (b.status === 'lendo') acts.push(`<button type="button" class="btn" data-action="open-log" data-id="${b.id}">Registrar páginas</button>`);
   acts.push('<button type="button" class="btn btn-ghost" data-action="edit-book">Editar dados e capa</button>');
-  acts.push(`<button type="button" class="btn btn-danger" data-action="ask-delete">${ICON.trash}<span>Excluir</span></button>`);
+  acts.push(`<button type="button" class="btn btn-ghost danger" data-action="ask-delete">${ICON.trash}<span>Tirar da estante</span></button>`);
   const confirm = m.confirmDelete
-    ? `<div class="confirm-box"><p style="flex:1 1 220px">Excluir “${esc(b.title)}” e todos os registros de leitura dele? Isso não tem volta.</p><button type="button" class="btn btn-danger solid" data-action="confirm-delete">Excluir</button><button type="button" class="btn btn-ghost" data-action="cancel-delete">Cancelar</button></div>`
+    ? `<div class="confirm"><p>Tirar “${esc(b.title)}” da estante? O resumo e as páginas registradas dele somem junto.</p><div class="row"><button type="button" class="btn btn-danger" data-action="confirm-delete">Tirar</button><button type="button" class="btn btn-ghost" data-action="cancel-delete">Deixa</button></div></div>`
     : '';
-  return `${card}${syn}<div class="actions">${acts.join('')}</div>${confirm}`;
+  return `${card}${syn}<div class="row">${acts.join('')}</div>${confirm}`;
 }
 
 function editPane(b) {
   const covers = [...new Set([b.cover, ...(b.coverAlts || [])].filter(Boolean))];
   const picks = covers.map((c) => `<button type="button" class="cover-pick ${c === b.cover ? 'on' : ''}" data-action="pick-cover" data-url="${esc(c)}" aria-label="Usar esta capa">${coverHTML({ ...b, cover: c, coverAlts: [] })}</button>`).join('');
   return `<form class="form" data-submit="save-edit">
-    <div class="form-grid">
+    <div class="fgrid">
       <label class="field"><span>Título</span><input id="ed-title" value="${esc(b.title)}" required></label>
       <label class="field"><span>Autor(es)</span><input id="ed-author" value="${esc(authorsOf(b))}" placeholder="separe por vírgula"></label>
       <label class="field"><span>Páginas</span><input id="ed-pages" type="number" min="0" inputmode="numeric" value="${b.pages || ''}"></label>
       <label class="field"><span>Gênero</span><select id="ed-genre"><option value="">—</option>${GENRES.map((g) => `<option ${b.genre === g ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
     </div>
     <div class="field"><span>Capa</span>
-      <div class="cover-picks">${picks}<button type="button" class="cover-pick ${!b.cover ? 'on' : ''}" data-action="pick-cover" data-url="" aria-label="Usar encadernação">${coverHTML({ ...b, cover: '' })}</button></div>
-      <div class="actions" style="margin-top:6px"><button type="button" class="btn btn-sm btn-ghost" data-action="more-covers" ${S.busy.covers ? 'disabled' : ''}>${S.busy.covers ? 'Procurando…' : 'Procurar outras capas'}</button></div>
+      <div class="cover-picks">${picks}<button type="button" class="cover-pick ${!b.cover ? 'on' : ''}" data-action="pick-cover" data-url="" aria-label="Sem foto de capa">${coverHTML({ ...b, cover: '' })}</button></div>
+      <button type="button" class="link" data-action="more-covers" ${S.busy.covers ? 'disabled' : ''}>${S.busy.covers ? 'procurando…' : 'procurar outras capas'}</button>
     </div>
-    <div class="actions"><button type="submit" class="btn btn-ink">Salvar</button><button type="button" class="btn btn-ghost" data-action="cancel-edit">Cancelar</button></div>
+    <div class="row"><button type="submit" class="btn btn-ink">Salvar</button><button type="button" class="btn btn-ghost" data-action="cancel-edit">Cancelar</button></div>
   </form>`;
 }
 
 function progressPane(b) {
   const r = rhythm(b);
   const ls = logsOf(b.id);
-  const stats = `<div class="stats-grid">
-    <div class="stat"><span class="k">Página</span><span class="v">${b.pagesRead || 0}<small> de ${b.pages || '?'}</small></span></div>
-    <div class="stat"><span class="k">Ritmo</span><span class="v">${r ? Math.round(r.perDay) : '—'}<small> pág/dia</small></span></div>
-    <div class="stat"><span class="k">Previsão</span><span class="v" style="font-size:1.5rem">${r && r.eta ? fmtDate(r.eta, { day: 'numeric', month: 'short' }) : '—'}</span></div>
-  </div>`;
+  const nums = `<dl class="numbers">
+    <div><dt>página</dt><dd>${b.pagesRead || 0}<small>/${b.pages || '?'}</small></dd></div>
+    <div><dt>por dia</dt><dd>${r ? Math.round(r.perDay) : '—'}</dd></div>
+    <div><dt>termina</dt><dd class="sm">${r && r.eta ? fmtDate(r.eta, { day: 'numeric', month: 'short' }) : '—'}</dd></div>
+  </dl>`;
   const totalField = !b.pages
-    ? `<form class="form" data-submit="set-total"><label class="field"><span>Quantas páginas o livro tem?</span><input id="pp-total" type="number" min="1" inputmode="numeric" required></label><div class="actions"><button class="btn btn-sm btn-ink" type="submit">Salvar</button></div></form>`
+    ? `<form class="form inline" data-submit="set-total"><label class="field"><span>Quantas páginas o livro tem?</span><input id="pp-total" type="number" min="1" inputmode="numeric" required></label><button class="btn btn-ink" type="submit">Salvar</button></form>`
     : '';
-  const quick = `<form class="form" data-submit="quick-page">
-    <div class="pages-input"><span class="muted" style="font-style:italic">Parei na página</span><input id="pp-page" type="number" min="0" ${b.pages ? `max="${b.pages}"` : ''} inputmode="numeric" placeholder="${b.pagesRead || 0}" aria-label="Página onde parei"><button class="btn btn-ink" type="submit">Atualizar</button></div>
-    <p class="muted" style="font-size:.9rem;font-style:italic">A diferença entra no calendário de hoje. Para outro dia, use o <button type="button" class="btn-link" data-action="open-log" data-id="${b.id}">registro detalhado</button>.</p>
-  </form>`;
+  const quick = `<form class="form inline" data-submit="quick-page">
+    <label class="field"><span>Parei na página</span><input id="pp-page" type="number" min="0" ${b.pages ? `max="${b.pages}"` : ''} inputmode="numeric" placeholder="${b.pagesRead || 0}"></label>
+    <button class="btn btn-ink" type="submit">Atualizar</button>
+  </form>
+  <p class="small muted">Conta como leitura de hoje. Pra outro dia, use <button type="button" class="link" data-action="open-log" data-id="${b.id}">registrar em outra data</button>.</p>`;
   const hist = ls.length
-    ? `<h3 style="font-size:1.2rem">Diário deste livro</h3><ul class="log-list">${ls.slice(0, 30).map((l) => `<li><span class="type muted" style="font-size:.78rem">${fmtDate(l.date, { day: '2-digit', month: 'short' })}</span><span class="t">${l.date === today() ? 'hoje' : fmtDate(l.date, { weekday: 'long' })}</span><span class="n">+${l.pages}</span><button type="button" class="x" data-action="log-delete" data-id="${l.id}" aria-label="Apagar registro">${ICON.trash}</button></li>`).join('')}</ul>`
-    : '<p class="muted" style="font-style:italic">Nenhuma página registrada ainda. Cada registro alimenta seu calendário e sua sequência de dias.</p>';
-  return `${stats}${totalField}${quick}${hist}`;
+    ? `<h4 class="h4">Dias em que você leu este livro</h4><ul class="log-list">${ls.slice(0, 30).map((l) => `<li><span class="d">${l.date === today() ? 'hoje' : fmtDate(l.date, { day: '2-digit', month: 'short' })}</span><span class="t">${fmtDate(l.date, { weekday: 'long' })}</span><span class="n">+${l.pages}</span><button type="button" class="x" data-action="log-delete" data-id="${l.id}" aria-label="Apagar registro">${ICON.trash}</button></li>`).join('')}</ul>`
+    : '<p class="muted">Nenhuma página registrada ainda.</p>';
+  return `${nums}${totalField}${quick}${hist}`;
 }
 
 function resumoPane(b) {
   const m = S.modal;
   if (b.status === 'concluido' && !m.editing) {
     const d = b.startDate && b.endDate ? daysBetween(b.startDate, b.endDate) + 1 : null;
-    return `<div class="note-meta"><span>Nota ${stars(b.rating)}</span><span>Início <b>${fmtDate(b.startDate)}</b></span><span>Término <b>${fmtDate(b.endDate)}</b></span>${d ? `<span>Leitura de <b>${plural(d, 'dia', 'dias')}</b></span>` : ''}<span>Gênero <b>${esc(b.genre || '—')}</b></span></div>
-      <div class="note-card">${esc(b.summary)}</div>
-      <div class="actions"><button type="button" class="btn btn-leather" data-action="book-tab" data-tab="sugestao">O que ler depois?</button><button type="button" class="btn btn-ghost" data-action="edit-summary">Editar resumo</button></div>`;
+    return `<blockquote class="note">${esc(b.summary)}</blockquote>
+      <p class="small muted">${[`de ${fmtDate(b.startDate)} a ${fmtDate(b.endDate)}`, d ? plural(d, 'dia', 'dias') : '', b.genre].filter(Boolean).join(' · ')}</p>
+      <div class="row"><button type="button" class="btn btn-ink" data-action="book-tab" data-tab="sugestao">O que ler depois?</button><button type="button" class="btn btn-ghost" data-action="edit-summary">Editar resumo</button></div>`;
   }
   if (!m.form) {
     m.form = {
@@ -510,68 +535,68 @@ function resumoPane(b) {
   const n = f.summary.trim().length;
   const intro = b.status === 'concluido'
     ? ''
-    : '<p class="muted" style="font-style:italic">O livro só entra para os lidos depois do resumo. Não precisa ser longo: do que se trata, o que você sentiu, o que fica com você.</p>';
+    : '<p class="muted">O livro só vai pra “Lidos” depois do resumo. Duas ou três frases bastam: do que trata e o que ficou com você.</p>';
   return `${intro}<form class="form" data-submit="save-summary">
-    <div class="field"><span>Sua nota</span><div class="rating-input">${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="${i <= f.rating ? 'on' : ''}" data-action="rate" data-n="${i}" aria-label="${i} estrela${i > 1 ? 's' : ''}">★</button>`).join('')}<span class="lbl">${labels[f.rating] || 'toque nas estrelas'}</span></div></div>
-    <div class="form-grid">
+    <div class="field"><span>Nota</span><div class="rate" data-rate-wrap>${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="${i <= f.rating ? 'on' : ''}" data-action="rate" data-n="${i}" aria-label="${i} estrela${i > 1 ? 's' : ''}">★</button>`).join('')}<span class="rate-lbl">${labels[f.rating] || ''}</span></div></div>
+    <label class="field"><span>Resumo</span><textarea id="sum-text" data-form="summary" rows="7" placeholder="Do que se trata, o que te marcou, se você indicaria…">${esc(f.summary)}</textarea><span id="sum-counter" class="counter ${n >= MIN_SUMMARY ? 'ok' : ''}">${n >= MIN_SUMMARY ? 'pode salvar' : `${n}/${MIN_SUMMARY}`}</span></label>
+    <div class="fgrid three">
       <label class="field"><span>Gênero</span><select id="sum-genre" data-form="genre"><option value="">—</option>${GENRES.map((g) => `<option ${f.genre === g ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
-      <label class="field"><span>Comecei em</span><input id="sum-start" type="date" max="${today()}" value="${esc(f.start)}" data-form="start"></label>
-      <label class="field"><span>Terminei em</span><input id="sum-end" type="date" max="${today()}" value="${esc(f.end)}" data-form="end"></label>
+      <label class="field"><span>Comecei</span><input id="sum-start" type="date" max="${today()}" value="${esc(f.start)}" data-form="start"></label>
+      <label class="field"><span>Terminei</span><input id="sum-end" type="date" max="${today()}" value="${esc(f.end)}" data-form="end"></label>
     </div>
-    <label class="field"><span>Meu resumo</span><textarea id="sum-text" data-form="summary" placeholder="Do que se trata, o que te marcou, se recomendaria…">${esc(f.summary)}</textarea><span id="sum-counter" class="counter ${n >= MIN_SUMMARY ? 'ok' : ''}">${n >= MIN_SUMMARY ? 'pronto para arquivar' : `${n}/${MIN_SUMMARY} caracteres`}</span></label>
     ${f.error ? `<p class="err">${esc(f.error)}</p>` : ''}
-    <div class="actions"><button type="submit" class="btn btn-leather">${b.status === 'concluido' ? 'Salvar resumo' : 'Arquivar como lido'}</button>${b.status === 'concluido' ? '<button type="button" class="btn btn-ghost" data-action="cancel-summary">Cancelar</button>' : ''}</div>
+    <div class="row"><button type="submit" class="btn btn-accent">${b.status === 'concluido' ? 'Salvar resumo' : 'Salvar e marcar como lido'}</button>${b.status === 'concluido' ? '<button type="button" class="btn btn-ghost" data-action="cancel-summary">Cancelar</button>' : ''}</div>
   </form>`;
 }
 
 function sugestaoPane(b) {
-  if (S.busy[b.id]) return loadingHTML(`Procurando o próximo livro com base em “${b.title}”…`);
+  if (S.busy[b.id]) return loadingHTML(`Procurando o que combina com “${b.title}”`);
   if (!b.recs) {
-    return `<p>Com base na sua nota, no seu resumo e em tudo que você já leu, a estante sugere o que ler depois.</p><div class="actions"><button type="button" class="btn btn-leather" data-action="rec-request" data-id="${b.id}">Sugerir o próximo livro</button></div>`;
+    return `<p>A sugestão leva em conta sua nota, seu resumo e o resto da estante.</p><div class="row"><button type="button" class="btn btn-ink" data-action="rec-request" data-id="${b.id}">Sugerir o próximo</button></div>`;
   }
-  return recsHTML(b.recs, b.id, `O que ler depois de “${b.title}”`);
+  return recsHTML(b.recs, b.id, '');
 }
 
 function recsHTML(r, owner, title) {
   const items = r.items || [];
   if (!items.length) {
-    return `<p class="muted" style="font-style:italic">Não encontrei boas sugestões dessa vez.</p><div class="actions"><button type="button" class="btn btn-leather" data-action="rec-request" data-id="${owner}">${ICON.refresh}<span>Tentar de novo</span></button></div>`;
+    return `<p class="muted">Não achei nada bom dessa vez.</p><div class="row"><button type="button" class="btn" data-action="rec-request" data-id="${owner}">${ICON.refresh}<span>Tentar de novo</span></button></div>`;
   }
-  const badge = r.source === 'ia' ? '<span class="source-badge ia">escolha da IA</span>' : '<span class="source-badge motor">motor da estante</span>';
+  const src = r.source === 'ia' ? 'escolhido pela IA' : 'escolhido pelo histórico da estante';
   const [main, ...alts] = items;
   const actionsFor = (it, i) => {
-    if (it.state === 'quero') return '<span class="rec-state">Na sua fila de Quero ler</span>';
-    if (it.state === 'lido') return '<span class="rec-state">Na estante, esperando o resumo</span>';
-    if (it.state === 'descartado') return '<span class="rec-state no">Descartado</span>';
-    return `<div class="actions">
+    if (it.state === 'quero') return '<span class="state">✓ na fila de Quero ler</span>';
+    if (it.state === 'lido') return '<span class="state">✓ na estante, falta o resumo</span>';
+    if (it.state === 'descartado') return '<span class="state no">descartado</span>';
+    return `<div class="row">
       <button type="button" class="btn btn-sm btn-ink" data-action="rec-quero" data-owner="${owner}" data-i="${i}">Quero ler</button>
       <button type="button" class="btn btn-sm btn-ghost" data-action="rec-read" data-owner="${owner}" data-i="${i}">Já li</button>
-      <button type="button" class="btn btn-sm btn-ghost" data-action="rec-no" data-owner="${owner}" data-i="${i}">Não me interessa</button>
+      <button type="button" class="btn btn-sm btn-ghost" data-action="rec-no" data-owner="${owner}" data-i="${i}">Não</button>
     </div>`;
   };
   const asBook = (it) => ({ title: it.title, authors: [it.author], cover: it.cover, coverAlts: it.covers || [] });
   const meta = (it) => [it.genre, it.year, it.pages ? `${it.pages} págs.` : ''].filter(Boolean).join(' · ');
-  return `<div class="rec-head"><h3>${esc(title)}</h3>${badge}</div>
-    ${r.note ? `<p class="muted" style="font-style:italic;font-size:.92rem">${esc(r.note)}</p>` : ''}
-    <article class="rec-main ${main.state === 'descartado' ? 'dimmed' : ''}">
-      <span class="ribbon">1ª escolha</span>
+  return `${title ? `<h3 class="h3">${esc(title)}</h3>` : ''}
+    <p class="small muted">${src}${r.note ? ` · ${esc(r.note)}` : ''}</p>
+    <article class="rec ${main.state === 'descartado' ? 'dim' : ''}">
       ${coverHTML(asBook(main))}
       <div class="rec-body">
         <h4>${esc(main.title)}</h4>
         <span class="by">${esc(main.author)}</span>
         ${main.hook ? `<p class="hook">${esc(main.hook)}</p>` : ''}
-        <p class="why">${esc(main.why)}</p>
-        ${meta(main) ? `<span class="meta">${esc(meta(main))}</span>` : ''}
+        <p>${esc(main.why)}</p>
+        ${meta(main) ? `<span class="small muted">${esc(meta(main))}</span>` : ''}
         ${actionsFor(main, 0)}
       </div>
     </article>
-    ${alts.length ? `<div class="rec-alts">${alts.map((it, j) => `<article class="rec-alt ${it.state === 'descartado' ? 'dimmed' : ''}">${coverHTML(asBook(it))}<div style="min-width:0;display:flex;flex-direction:column;gap:4px"><h5>${esc(it.title)}</h5><span class="by" style="font-style:italic;font-size:.9rem">${esc(it.author)}</span><p class="why">${esc(it.why)}</p>${actionsFor(it, j + 1)}</div></article>`).join('')}</div>` : ''}
-    <div class="actions"><button type="button" class="btn btn-ghost" data-action="rec-request" data-id="${owner}">${ICON.refresh}<span>Outras sugestões</span></button></div>`;
+    ${alts.length ? `<div class="rec-alts">${alts.map((it, j) => `<article class="rec small-rec ${it.state === 'descartado' ? 'dim' : ''}">${coverHTML(asBook(it))}<div class="rec-body"><h5>${esc(it.title)}</h5><span class="by">${esc(it.author)}</span><p>${esc(it.why)}</p>${actionsFor(it, j + 1)}</div></article>`).join('')}</div>` : ''}
+    <button type="button" class="link" data-action="rec-request" data-id="${owner}">${ICON.refresh}<span>outras sugestões</span></button>`;
 }
 
-/* ================= MODAL: catalogar ================= */
+/* ================= ADICIONAR LIVRO ================= */
 function openAdd() {
-  S.modal = { type: 'add', step: 'busca', title: '', author: '', results: null, loading: false, error: '', pick: null, draft: null, coverIdx: 0, status: 'quero', pageAt: '', start: today(), dupWarn: false };
+  if (needsLogin()) { askLogin(); return; }
+  S.modal = { type: 'add', step: 'busca', title: '', author: '', results: null, loading: false, error: '', pick: null, draft: null, coverIdx: 0, status: 'quero', pageAt: '', start: today(), dupWarn: false, q: '' };
   renderModal();
   setTimeout(() => { const i = $('#add-title'); if (i) i.focus(); }, 60);
 }
@@ -580,21 +605,21 @@ function addModalHTML() {
   const m = S.modal;
   if (m.step === 'confirmar') return addConfirmHTML();
   let results = '';
-  if (m.loading) results = loadingHTML('Procurando nos catálogos…');
+  if (m.loading) results = loadingHTML();
   else if (m.error) results = `<p class="err">${esc(m.error)}</p>`;
-  else if (m.results && !m.results.length) results = '<p class="muted" style="font-style:italic">Não encontrei esse livro. Confira a grafia ou cadastre sem buscar.</p>';
+  else if (m.results && !m.results.length) results = '<p class="muted">Não achei esse. Confira a grafia ou <button type="button" class="link" data-action="add-manual">cadastre sem busca</button>.</p>';
   else if (m.results) {
-    results = `<p class="muted" style="font-style:italic">Toque na edição certa:</p><div class="results">${m.results.map((r, i) => `<button type="button" class="result" data-action="add-pick" data-i="${i}">${coverHTML({ title: r.title, authors: r.authors, cover: r.covers[0], coverAlts: r.covers })}<span class="t">${esc(r.title)}</span><span class="a">${esc(r.authors.join(', '))}</span><span class="m">${[r.year, r.pages ? `${r.pages} p.` : ''].filter(Boolean).join(' · ')}</span></button>`).join('')}</div>`;
+    results = `<ul class="results">${m.results.map((r, i) => `<li><button type="button" class="result" data-action="add-pick" data-i="${i}">${coverHTML({ title: r.title, authors: r.authors, cover: r.covers[0], coverAlts: r.covers })}<span class="r-t">${esc(r.title)}</span><span class="r-a">${esc(r.authors.join(', '))}</span><span class="r-m">${[r.year, r.pages ? `${r.pages} págs.` : ''].filter(Boolean).join(' · ')}</span></button></li>`).join('')}</ul>`;
+  } else {
+    results = '<p class="small muted">A busca começa sozinha enquanto você digita. Capa, páginas e sinopse vêm junto.</p>';
   }
-  return `<span class="eyebrow">Novo volume</span><h2 style="font-size:var(--step-3);margin-bottom:14px">Catalogar livro</h2>
+  return `<h2 class="sheet-title">Adicionar livro</h2>
     <form class="form" data-submit="add-search">
-      <div class="form-grid">
-        <label class="field"><span>Título</span><input id="add-title" value="${esc(m.title)}" data-bind="title" autocomplete="off" placeholder="Ex.: Dom Casmurro"></label>
-        <label class="field"><span>Autor</span><input id="add-author" value="${esc(m.author)}" data-bind="author" autocomplete="off" placeholder="Ex.: Machado de Assis"></label>
-      </div>
-      <div class="actions"><button type="submit" class="btn btn-ink" ${m.loading ? 'disabled' : ''}>${ICON.search}<span>Buscar capa e dados</span></button><button type="button" class="btn-link" data-action="add-manual">cadastrar sem buscar</button></div>
+      <label class="field big"><span>Título</span><input id="add-title" value="${esc(m.title)}" data-bind="title" data-live="1" autocomplete="off" placeholder="Torto Arado"></label>
+      <label class="field"><span>Autor <em>(ajuda a achar)</em></span><input id="add-author" value="${esc(m.author)}" data-bind="author" data-live="1" autocomplete="off" placeholder="Itamar Vieira Junior"></label>
+      <div class="row"><button type="submit" class="btn btn-ink" ${m.loading ? 'disabled' : ''}>${ICON.search}<span>Buscar</span></button><button type="button" class="link" data-action="add-manual">cadastrar sem buscar</button></div>
     </form>
-    <div style="margin-top:18px">${results}</div>`;
+    <div class="results-wrap">${results}</div>`;
 }
 
 function addConfirmHTML() {
@@ -608,37 +633,47 @@ function addConfirmHTML() {
     : '';
   const st = m.status;
   const extra = st === 'lendo'
-    ? `<div class="form-grid"><label class="field"><span>Já estou na página</span><input type="number" min="0" inputmode="numeric" value="${esc(m.pageAt)}" data-bind="pageAt" placeholder="0"></label><label class="field"><span>Comecei em</span><input type="date" max="${today()}" value="${esc(m.start)}" data-bind="start"></label></div>`
+    ? `<div class="fgrid"><label class="field"><span>Estou na página</span><input type="number" min="0" inputmode="numeric" value="${esc(m.pageAt)}" data-bind="pageAt" placeholder="0"></label><label class="field"><span>Comecei em</span><input type="date" max="${today()}" value="${esc(m.start)}" data-bind="start"></label></div>`
     : st === 'lido'
-      ? '<p class="muted" style="font-style:italic">Em seguida você escreve o resumo. Até lá, o livro fica na prateleira “Falta o resumo”.</p>'
+      ? '<p class="small muted">Na próxima tela você escreve o resumo.</p>'
       : '';
-  return `<button type="button" class="btn-link" data-action="add-back">← voltar à busca</button>
-    <div class="ficha" style="margin-top:12px">
-      <div class="ficha-side"><div class="cover-wrap tilt" data-tilt>${coverHTML(preview)}</div>${picks}</div>
-      <form class="ficha-body form" data-submit="add-save">
-        <span class="eyebrow">Confira a ficha</span>
-        <div class="form-grid">
-          <label class="field"><span>Título</span><input value="${esc(d.title)}" data-bind="draft.title" required></label>
-          <label class="field"><span>Autor(es)</span><input value="${esc(d.author)}" data-bind="draft.author"></label>
-          <label class="field"><span>Páginas</span><input type="number" min="0" inputmode="numeric" value="${esc(d.pages)}" data-bind="draft.pages"></label>
-          <label class="field"><span>Gênero</span><select data-bind="draft.genre"><option value="">—</option>${GENRES.map((g) => `<option ${d.genre === g ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
+  return `<button type="button" class="link back" data-action="add-back">${ICON.left}<span>voltar pra busca</span></button>
+    <div class="book-head">
+      <div class="book-cover" data-tilt>${coverHTML(preview)}</div>
+      <div class="book-id">${picks ? `<span class="small muted">Escolha a capa</span>${picks}` : ''}</div>
+    </div>
+    <form class="form" data-submit="add-save">
+      <div class="fgrid">
+        <label class="field"><span>Título</span><input value="${esc(d.title)}" data-bind="draft.title" required></label>
+        <label class="field"><span>Autor(es)</span><input value="${esc(d.author)}" data-bind="draft.author"></label>
+        <label class="field"><span>Páginas</span><input type="number" min="0" inputmode="numeric" value="${esc(d.pages)}" data-bind="draft.pages"></label>
+        <label class="field"><span>Gênero</span><select data-bind="draft.genre"><option value="">—</option>${GENRES.map((g) => `<option ${d.genre === g ? 'selected' : ''}>${g}</option>`).join('')}</select></label>
+      </div>
+      <div class="field"><span>Situação</span>
+        <div class="status-switch wide">
+          <button type="button" class="${st === 'quero' ? 'on' : ''}" data-action="add-status" data-s="quero">Quero ler</button>
+          <button type="button" class="${st === 'lendo' ? 'on' : ''}" data-action="add-status" data-s="lendo">Lendo</button>
+          <button type="button" class="${st === 'lido' ? 'on' : ''}" data-action="add-status" data-s="lido">Já li</button>
         </div>
-        <div class="field"><span>Onde ele entra?</span>
-          <div class="status-choice">
-            <button type="button" class="${st === 'quero' ? 'on' : ''}" data-action="add-status" data-s="quero">Quero ler<small>para a fila</small></button>
-            <button type="button" class="${st === 'lendo' ? 'on' : ''}" data-action="add-status" data-s="lendo">Lendo<small>na mesa agora</small></button>
-            <button type="button" class="${st === 'lido' ? 'on' : ''}" data-action="add-status" data-s="lido">Já li<small>escrevo o resumo</small></button>
-          </div>
-        </div>
-        ${extra}
-        ${m.dupWarn ? '<div class="confirm-box"><p style="flex:1 1 200px">Esse livro já está na sua estante. Quer catalogar outra vez mesmo assim?</p><button type="submit" class="btn btn-sm btn-ink">Sim, catalogar</button></div>' : ''}
-        ${m.error ? `<p class="err">${esc(m.error)}</p>` : ''}
-        <div class="actions"><button type="submit" class="btn btn-gold">Pôr na estante</button></div>
-      </form>
-    </div>`;
+      </div>
+      ${extra}
+      ${m.dupWarn ? '<div class="confirm"><p>Esse livro já está na sua estante. Adicionar de novo?</p><button type="submit" class="btn btn-sm btn-ink">Adicionar mesmo assim</button></div>' : ''}
+      ${m.error ? `<p class="err">${esc(m.error)}</p>` : ''}
+      <div class="row"><button type="submit" class="btn btn-accent">Adicionar à estante</button></div>
+    </form>`;
 }
 
-/* ================= MODAL: registrar leitura ================= */
+let liveT;
+function liveSearch() {
+  const m = S.modal;
+  if (!m || m.type !== 'add' || m.step !== 'busca') return;
+  clearTimeout(liveT);
+  const q = `${(m.title || '').trim()}|${(m.author || '').trim()}`;
+  if ((m.title || '').trim().length < 3 || q === m.q) return;
+  liveT = setTimeout(() => { if (S.modal === m) { m.q = q; ACTIONS['add-search'](); } }, 550);
+}
+
+/* ================= REGISTRAR LEITURA ================= */
 function openLog({ bookId, date } = {}) {
   const reading = allBooks().filter((b) => b.status === 'lendo').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   S.modal = { type: 'log', date: date || today(), bookId: bookId || (reading[0] && reading[0].id) || null, mode: 'qtd', value: '', error: '' };
@@ -650,25 +685,92 @@ function logModalHTML() {
   const m = S.modal;
   const reading = allBooks().filter((b) => b.status === 'lendo').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const isToday = m.date === today();
-  const head = `<span class="eyebrow">Registro de leitura</span><h2 style="font-size:var(--step-3);margin-bottom:14px">O que você leu ${isToday ? 'hoje' : `em ${fmtDate(m.date, { day: 'numeric', month: 'long' })}`}?</h2>`;
+  const head = `<h2 class="sheet-title">Leitura de ${isToday ? 'hoje' : fmtDate(m.date, { day: 'numeric', month: 'long' })}</h2>`;
   if (!reading.length) {
-    return `${head}<p class="muted" style="font-style:italic">Nenhum livro está marcado como “Lendo”. Abra um livro da fila e toque em “Começar a ler”.</p><div class="actions" style="margin-top:12px"><button type="button" class="btn btn-ink" data-action="close-go" data-to="estante">Ir para a estante</button></div>`;
+    return `${head}<p class="muted">Nenhum livro está em “Lendo”. Abra um livro da fila e mude pra Lendo.</p><div class="row"><button type="button" class="btn btn-ink" data-action="close-go" data-to="estante">Ir pra estante</button></div>`;
   }
   const b = S.books[m.bookId];
   const hint = b ? `Você estava na página ${b.pagesRead || 0}${b.pages ? ` de ${b.pages}` : ''}.` : '';
   return `${head}<form class="form" data-submit="log-save">
-    <div class="field"><span>Qual livro?</span><div class="book-pick">${reading.map((r) => `<button type="button" class="${r.id === m.bookId ? 'on' : ''}" data-action="log-book" data-id="${r.id}">${coverHTML(r)}<span class="t">${esc(r.title)}</span></button>`).join('')}</div></div>
-    <div class="seg" role="group" aria-label="Como registrar"><button type="button" class="${m.mode === 'qtd' ? 'on' : ''}" data-action="log-mode" data-m="qtd">Li X páginas</button><button type="button" class="${m.mode === 'pagina' ? 'on' : ''}" data-action="log-mode" data-m="pagina">Parei na página</button></div>
-    <div class="pages-input"><input id="log-value" type="number" min="1" inputmode="numeric" value="${esc(m.value)}" data-bind="value" aria-label="${m.mode === 'qtd' ? 'Páginas lidas' : 'Página onde parei'}"><span class="muted" style="font-style:italic">${m.mode === 'qtd' ? 'páginas' : 'é onde parei'}</span></div>
-    ${m.mode === 'qtd' ? `<div class="quick">${[5, 10, 20, 30, 50].map((n) => `<button type="button" class="chip" data-action="log-quick" data-n="${n}">+${n}</button>`).join('')}</div>` : ''}
-    <p class="muted" style="font-size:.92rem">${esc(hint)}</p>
-    <label class="field" style="max-width:220px"><span>Dia</span><input type="date" max="${today()}" value="${esc(m.date)}" data-bind="date"></label>
+    ${reading.length > 1 ? `<div class="pick-row">${reading.map((r) => `<button type="button" class="${r.id === m.bookId ? 'on' : ''}" data-action="log-book" data-id="${r.id}" title="${esc(r.title)}">${coverHTML(r)}</button>`).join('')}</div>` : ''}
+    <p class="pick-name">${b ? esc(b.title) : ''}</p>
+    <div class="status-switch wide"><button type="button" class="${m.mode === 'qtd' ? 'on' : ''}" data-action="log-mode" data-m="qtd">Li tantas páginas</button><button type="button" class="${m.mode === 'pagina' ? 'on' : ''}" data-action="log-mode" data-m="pagina">Parei na página</button></div>
+    <div class="big-number"><input id="log-value" type="number" min="1" inputmode="numeric" value="${esc(m.value)}" data-bind="value" placeholder="0" aria-label="${m.mode === 'qtd' ? 'Páginas lidas' : 'Página onde parei'}"><span>${m.mode === 'qtd' ? 'páginas' : 'é onde parei'}</span></div>
+    ${m.mode === 'qtd' ? `<div class="quick">${[5, 10, 20, 30, 50].map((n) => `<button type="button" data-action="log-quick" data-n="${n}">+${n}</button>`).join('')}</div>` : ''}
+    <p class="small muted">${esc(hint)}</p>
+    <label class="field narrow"><span>Dia</span><input type="date" max="${today()}" value="${esc(m.date)}" data-bind="date"></label>
     ${m.error ? `<p class="err">${esc(m.error)}</p>` : ''}
-    <div class="actions"><button type="submit" class="btn btn-gold">Carimbar no calendário</button></div>
+    <div class="row"><button type="submit" class="btn btn-accent">Salvar</button></div>
   </form>`;
 }
 
-/* ================= modal genérico ================= */
+/* ================= FOTO DE PERFIL ================= */
+function openPhoto(file) {
+  if (!file || !file.type.startsWith('image/')) { toast('Escolha uma imagem.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      S.modal = { type: 'photo', src: reader.result, w: img.naturalWidth, h: img.naturalHeight, zoom: 1, x: 0, y: 0, img };
+      renderModal();
+      applyCrop();
+    };
+    img.onerror = () => toast('Não consegui abrir essa imagem.');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function photoModalHTML() {
+  const m = S.modal;
+  return `<h2 class="sheet-title">Sua foto</h2>
+    <p class="small muted">Arraste pra enquadrar. Use a barra pra aproximar.</p>
+    <div class="crop" id="crop"><img id="crop-img" src="${m.src}" alt="" draggable="false"></div>
+    <label class="zoom">${ICON.search}<input type="range" min="1" max="3" step="0.01" value="${m.zoom}" data-crop-zoom aria-label="Aproximar"></label>
+    <div class="row"><button type="button" class="btn btn-accent" data-action="photo-save">Usar esta foto</button><button type="button" class="btn btn-ghost" data-action="close-modal">Cancelar</button></div>`;
+}
+
+function cropGeom() {
+  const m = S.modal;
+  const s = (CROP / Math.min(m.w, m.h)) * m.zoom;
+  const w = m.w * s;
+  const h = m.h * s;
+  const mx = (w - CROP) / 2;
+  const my = (h - CROP) / 2;
+  m.x = Math.max(-mx, Math.min(mx, m.x));
+  m.y = Math.max(-my, Math.min(my, m.y));
+  return { w, h, left: CROP / 2 + m.x - w / 2, top: CROP / 2 + m.y - h / 2 };
+}
+
+function applyCrop() {
+  const img = $('#crop-img');
+  if (!img || !S.modal || S.modal.type !== 'photo') return;
+  const g = cropGeom();
+  img.style.width = `${g.w}px`;
+  img.style.height = `${g.h}px`;
+  img.style.left = `${g.left}px`;
+  img.style.top = `${g.top}px`;
+}
+
+function exportCrop() {
+  const m = S.modal;
+  const out = 360;
+  const f = out / CROP;
+  const g = cropGeom();
+  const c = document.createElement('canvas');
+  c.width = out;
+  c.height = out;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out, out);
+  ctx.drawImage(m.img, g.left * f, g.top * f, g.w * f, g.h * f);
+  let q = 0.85;
+  let data = c.toDataURL('image/jpeg', q);
+  while (data.length > 180000 && q > 0.4) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
+  return data;
+}
+
+/* ================= folha (sheet) genérica ================= */
 function renderModal() {
   const root = $('#modal-root');
   if (!S.modal) {
@@ -676,18 +778,28 @@ function renderModal() {
     document.body.style.overflow = '';
     return;
   }
-  const old = root.querySelector('.modal');
+  const a = document.activeElement;
+  const keepId = a && a.id && root.contains(a) ? a.id : null;
+  const caret = keepId && typeof a.selectionStart === 'number' ? a.selectionStart : null;
+  const old = root.querySelector('.sheet');
   const scroll = old ? old.scrollTop : 0;
-  const html = { book: bookModalHTML, add: addModalHTML, log: logModalHTML }[S.modal.type]();
+  const html = { book: bookModalHTML, add: addModalHTML, log: logModalHTML, photo: photoModalHTML }[S.modal.type]();
   if (!S.modal) { root.innerHTML = ''; return; }
-  const narrow = S.modal.type === 'log' ? 'narrow' : '';
-  const label = { book: 'Ficha do livro', add: 'Catalogar livro', log: 'Registrar leitura' }[S.modal.type];
-  root.innerHTML = `<div class="modal-backdrop" data-action="backdrop"><div class="modal ${narrow}" role="dialog" aria-modal="true" aria-label="${label}"><button type="button" class="icon-btn modal-close" data-action="close-modal" aria-label="Fechar">${ICON.close}</button>${html}</div></div>`;
-  const modal = root.querySelector('.modal');
+  const narrow = S.modal.type === 'log' || S.modal.type === 'photo' ? 'narrow' : '';
+  const label = { book: 'Livro', add: 'Adicionar livro', log: 'Registrar leitura', photo: 'Foto de perfil' }[S.modal.type];
+  root.innerHTML = `<div class="sheet-backdrop" data-action="backdrop"><div class="sheet ${narrow}" role="dialog" aria-modal="true" aria-label="${label}"><button type="button" class="icon-btn sheet-close" data-action="close-modal" aria-label="Fechar">${ICON.close}</button>${html}</div></div>`;
+  const sheet = root.querySelector('.sheet');
   if (old) {
-    modal.style.animation = 'none';
-    root.querySelector('.modal-backdrop').style.animation = 'none';
-    modal.scrollTop = scroll;
+    sheet.style.animation = 'none';
+    root.querySelector('.sheet-backdrop').style.animation = 'none';
+    sheet.scrollTop = scroll;
+  }
+  if (keepId) {
+    const n = document.getElementById(keepId);
+    if (n) {
+      n.focus();
+      if (caret !== null) { try { n.setSelectionRange(caret, caret); } catch (e) { /* ignora */ } }
+    }
   }
   document.body.style.overflow = 'hidden';
 }
@@ -709,38 +821,38 @@ function viewCalendario() {
   const monthDays = Object.keys(totals).filter((k) => k.startsWith(monthKey) && totals[k] > 0);
   const monthPages = monthDays.reduce((s, k) => s + totals[k], 0);
   const metDays = monthDays.filter((k) => totals[k] >= goal).length;
-  const todayPct = Math.min(100, Math.round((todayPages / goal) * 100));
 
-  const board = `<div class="streak-board">
-    <div class="stat flame"><span class="k">Sequência</span><span class="v">${ICON.flame}${cur}<small>${cur === 1 ? 'dia' : 'dias'}</small></span><span class="muted" style="font-size:.86rem">recorde: ${plural(best, 'dia', 'dias')}</span></div>
-    <div class="stat"><span class="k">Hoje</span><span class="v">${todayPages}<small>/ ${goal} pág.</small></span><div class="progress" style="margin-top:6px"><i style="width:${todayPct}%"></i></div></div>
-    <div class="stat"><span class="k">Meta diária</span><div class="goal-ctl"><button type="button" data-action="goal" data-d="-5" aria-label="Diminuir meta">−</button><span class="v">${goal}</span><button type="button" data-action="goal" data-d="5" aria-label="Aumentar meta">+</button></div><span class="muted" style="font-size:.86rem">páginas por dia</span></div>
-    <div class="stat"><span class="k">Em ${MONTHS[m]}</span><span class="v">${monthPages}<small> pág.</small></span><span class="muted" style="font-size:.86rem">${plural(monthDays.length, 'dia', 'dias')} de leitura · ${metDays} na meta</span></div>
-  </div>`;
+  const nums = `<dl class="numbers wide">
+    <div><dt>dias seguidos</dt><dd>${cur}</dd><span class="small muted">recorde ${best}</span></div>
+    <div><dt>hoje</dt><dd>${todayPages}<small>/${goal}</small></dd><span class="small muted">${todayPages >= goal ? 'meta batida' : `faltam ${goal - todayPages}`}</span></div>
+    <div><dt>meta diária</dt><dd class="goal"><button type="button" data-action="goal" data-d="-5" aria-label="Diminuir meta">−</button>${goal}<button type="button" data-action="goal" data-d="5" aria-label="Aumentar meta">+</button></dd><span class="small muted">páginas</span></div>
+    <div><dt>em ${MONTHS[m]}</dt><dd>${monthPages}</dd><span class="small muted">${plural(monthDays.length, 'dia', 'dias')}, ${metDays} na meta</span></div>
+  </dl>`;
 
   const first = new Date(y, m, 1).getDay();
   const nDays = new Date(y, m + 1, 0).getDate();
   const cells = [];
-  for (let i = 0; i < first; i++) cells.push('<span class="cal-day out" aria-hidden="true"></span>');
+  for (let i = 0; i < first; i++) cells.push('<span class="day out" aria-hidden="true"></span>');
   for (let d = 1; d <= nDays; d++) {
     const key = `${monthKey}-${pad(d)}`;
     const p = totals[key] || 0;
     const future = key > t;
-    const cls = [`lvl${level(p, goal)}`, key === t ? 'today' : '', key === S.cal.sel ? 'sel' : '', key === S.cal.just ? 'just' : ''].join(' ');
-    cells.push(`<button type="button" class="cal-day ${cls}" data-action="cal-day" data-date="${key}" ${future ? 'disabled' : ''} aria-label="${d} de ${MONTHS[m]}: ${p} páginas"><span class="d">${d}</span>${p ? `<span class="p">${p}</span>` : ''}${p >= goal ? '<span class="stamp">meta</span>' : ''}</button>`);
+    const sc = p ? Math.min(1, 0.3 + (0.7 * p) / goal) : 0;
+    const cls = [p >= goal ? 'met' : p ? 'some' : '', key === t ? 'today' : '', key === S.cal.sel ? 'sel' : '', key === S.cal.just ? 'just' : ''].join(' ');
+    cells.push(`<button type="button" class="day ${cls}" style="--s:${sc.toFixed(2)}" data-action="cal-day" data-date="${key}" ${future ? 'disabled' : ''} aria-label="${d} de ${MONTHS[m]}: ${p} páginas"><span class="dn">${d}</span>${p ? `<span class="dot"><b>${p}</b></span>` : ''}</button>`);
   }
   S.cal.just = '';
   const isCurrent = y === now.getFullYear() && m === now.getMonth();
-  const loan = `<div class="loan-card">
-    <div class="loan-head"><div><span class="eyebrow">Cartão de leitura</span><h2>${MONTHS[m].charAt(0).toUpperCase()}${MONTHS[m].slice(1)} de ${y}</h2></div>
-      <div class="loan-nav"><button type="button" class="icon-btn" data-action="cal-move" data-d="-1" aria-label="Mês anterior">${ICON.left}</button>${!isCurrent ? '<button type="button" class="btn btn-sm btn-ghost" data-action="cal-today">Hoje</button>' : ''}<button type="button" class="icon-btn" data-action="cal-move" data-d="1" aria-label="Próximo mês" ${isCurrent ? 'disabled' : ''}>${ICON.right}</button></div>
+  const cal = `<div class="month">
+    <div class="month-head"><h2 class="h2">${MONTHS[m]} <span>${y}</span></h2>
+      <div class="month-nav"><button type="button" class="icon-btn" data-action="cal-move" data-d="-1" aria-label="Mês anterior">${ICON.left}</button>${!isCurrent ? '<button type="button" class="link" data-action="cal-today">hoje</button>' : ''}<button type="button" class="icon-btn" data-action="cal-move" data-d="1" aria-label="Próximo mês" ${isCurrent ? 'disabled' : ''}>${ICON.right}</button></div>
     </div>
-    <div class="cal-grid">${DOW.map((d) => `<span class="cal-dow">${d}</span>`).join('')}${cells.join('')}</div>
+    <div class="cal">${DOW.map((d) => `<span class="dow">${d}</span>`).join('')}${cells.join('')}</div>
   </div>`;
 
-  return `<div class="page-head"><div><span class="eyebrow">Constância</span><h1>O <em>calendário</em></h1><p class="lede">Toque num dia, escolha o livro e quantas páginas leu. O progresso do livro se atualiza sozinho.</p></div><button type="button" class="btn btn-gold" data-action="open-log">${ICON.plus}<span>Registrar leitura de hoje</span></button></div>
-    ${board}
-    <div class="cal-layout">${loan}<div class="side-stack">${dayPanelHTML(totals)}${bookMonthHTML(monthKey)}</div></div>
+  return `<header class="page-top"><h1>Calendário</h1><button type="button" class="btn btn-accent" data-action="open-log">${ICON.plus}<span>Registrar leitura</span></button></header>
+    ${nums}
+    <div class="cal-layout">${cal}<aside class="side">${dayPanelHTML(totals)}${bookMonthHTML(monthKey)}</aside></div>
     ${heatHTML(totals, goal)}`;
 }
 
@@ -751,14 +863,13 @@ function dayPanelHTML(totals) {
   const list = ls.length
     ? `<ul class="log-list">${ls.map((l) => {
       const b = S.books[l.bookId];
-      return `<li>${b ? coverHTML(b) : '<span></span>'}<span class="t">${esc(b ? b.title : 'Livro removido')}</span><span class="n">${l.pages} p.</span><button type="button" class="x" data-action="log-delete" data-id="${l.id}" aria-label="Apagar registro">${ICON.trash}</button></li>`;
+      return `<li>${b ? coverHTML(b, 'xs') : '<span></span>'}<span class="t">${esc(b ? b.title : 'Livro removido')}</span><span class="n">${l.pages}</span><button type="button" class="x" data-action="log-delete" data-id="${l.id}" aria-label="Apagar registro">${ICON.trash}</button></li>`;
     }).join('')}</ul>`
-    : '<p class="muted" style="font-style:italic">Nenhuma leitura registrada neste dia.</p>';
-  return `<div class="day-panel">
-    <div><span class="eyebrow">${fmtDate(sel, { weekday: 'long' })}</span><h3>${fmtDate(sel, { day: 'numeric', month: 'long', year: 'numeric' })}</h3></div>
-    ${totals[sel] ? `<p class="type" style="font-size:.9rem">${totals[sel]} páginas no total</p>` : ''}
+    : '<p class="muted">Nada registrado nesse dia.</p>';
+  return `<div class="side-box">
+    <h3 class="h3">${sel === today() ? 'Hoje' : fmtDate(sel, { weekday: 'long', day: 'numeric', month: 'long' })}${totals[sel] ? ` <span class="muted">· ${totals[sel]} págs.</span>` : ''}</h3>
     ${list}
-    ${isFuture ? '' : `<button type="button" class="btn btn-ink" data-action="open-log" data-date="${sel}">${ICON.plus}<span>Registrar leitura${sel === today() ? ' de hoje' : ' neste dia'}</span></button>`}
+    ${isFuture ? '' : `<button type="button" class="btn btn-sm" data-action="open-log" data-date="${sel}">${ICON.plus}<span>Registrar ${sel === today() ? 'hoje' : 'nesse dia'}</span></button>`}
   </div>`;
 }
 
@@ -768,7 +879,7 @@ function bookMonthHTML(monthKey) {
   const rows = Object.entries(per).sort((a, b) => b[1] - a[1]);
   if (!rows.length) return '';
   const max = rows[0][1];
-  return `<div class="day-panel"><h3>Páginas por livro no mês</h3><div class="book-month">${rows.map(([id, n]) => `<div class="bm-row"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(S.books[id] ? S.books[id].title : 'Livro removido')}</span><span class="n">${n} p.</span><span class="bar"><i style="width:${Math.round((n / max) * 100)}%"></i></span></div>`).join('')}</div></div>`;
+  return `<div class="side-box"><h3 class="h3">Páginas por livro no mês</h3><div class="bars">${rows.map(([id, n]) => `<div class="bar-row"><span class="bl">${esc(S.books[id] ? S.books[id].title : 'Livro removido')}</span><span class="bn">${n}</span><span class="bt"><i style="width:${Math.round((n / max) * 100)}%"></i></span></div>`).join('')}</div></div>`;
 }
 
 function heatHTML(totals, goal) {
@@ -801,45 +912,39 @@ function heatHTML(totals, goal) {
     }
     d = addDays(d, 1);
   }
-  return `<div class="heat-card">
-    <h2 class="section-title">O ano em páginas <small>${plural(daysRead, 'dia lido', 'dias lidos')} nos últimos 12 meses</small></h2>
+  return `<section class="block">
+    <h2 class="h2">Últimos 12 meses <span class="muted">${plural(daysRead, 'dia com leitura', 'dias com leitura')}</span></h2>
     <div class="heat-scroll" id="heat-scroll"><div class="heat-months">${months.join('')}</div><div class="heat">${cells.join('')}</div></div>
-    <div class="legend"><span>menos</span><i style="background:color-mix(in srgb,var(--ink) 8%,transparent)"></i><i class="l1" style="background:color-mix(in srgb,var(--moss) 30%,var(--paper-2))"></i><i style="background:color-mix(in srgb,var(--moss) 55%,var(--paper-2))"></i><i style="background:color-mix(in srgb,var(--moss) 78%,var(--paper-2))"></i><i style="background:var(--moss)"></i><span>mais</span></div>
-    <p class="heat-cap" id="heat-cap">Toque num quadradinho para ver o dia.</p>
-  </div>`;
+    <p class="small muted" id="heat-cap">Passe o dedo ou o mouse nos quadradinhos.</p>
+  </section>`;
 }
 
 /* ================= DESCOBRIR ================= */
 function viewDescobrir() {
   const done = allBooks().filter((b) => b.status === 'concluido').sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
   const hasKey = !!S.settings.geminiKey;
-  const hero = `<div class="discover-hero">
-    <div><span class="eyebrow" style="color:var(--gold-bright)">Sugestões da casa</span><h2>O que ler depois?</h2><p>As sugestões aprendem com suas notas, seus resumos e com o que você recusa. Quanto mais livros você arquiva, mais certeiras elas ficam.</p></div>
-    <button type="button" class="btn btn-gold" data-action="rec-request" data-id="geral" ${S.busy.geral ? 'disabled' : ''}>${ICON.refresh}<span>Sugestão olhando a estante toda</span></button>
-  </div>`;
-  const keyBanner = !hasKey
-    ? '<div class="banner"><p>A IA gratuita ainda não está ligada. Enquanto isso, quem sugere é o motor da estante. Leva 2 minutos para ativar.</p><button type="button" class="btn btn-sm btn-ink" data-action="go" data-to="leitor">Ativar a IA</button></div>'
-    : '';
+  const top = `<header class="page-top"><h1>O que ler depois</h1><button type="button" class="btn btn-ink" data-action="rec-request" data-id="geral" ${S.busy.geral ? 'disabled' : ''}>${ICON.refresh}<span>Sugerir olhando a estante toda</span></button></header>
+    ${!hasKey ? '<p class="notice">Sem a chave da IA, as sugestões vêm do histórico da sua estante. <a href="#leitor">Ligar a IA</a></p>' : ''}`;
   let general = '';
-  if (S.busy.geral) general = `<section class="rec-section">${loadingHTML('Percorrendo a estante inteira…')}</section>`;
-  else if (S.settings.generalRecs) general = `<section class="rec-section">${recsHTML(S.settings.generalRecs, 'geral', 'Para você, olhando a estante toda')}</section>`;
+  if (S.busy.geral) general = `<section class="block">${loadingHTML('Olhando a estante inteira')}</section>`;
+  else if (S.settings.generalRecs) general = `<section class="block">${recsHTML(S.settings.generalRecs, 'geral', 'Pra você, olhando tudo')}</section>`;
 
   const withRecs = done.filter((b) => b.recs || S.busy[b.id]);
   const without = done.filter((b) => !b.recs && !S.busy[b.id]);
-  const per = withRecs.map((b) => `<section class="rec-section">
-      <div class="anchor">${coverHTML(b)}<h3>Porque você leu <em>${esc(b.title)}</em></h3></div>
-      ${S.busy[b.id] ? loadingHTML('Pensando…') : recsHTML(b.recs, b.id, '')}
+  const per = withRecs.map((b) => `<section class="block">
+      <div class="because">${coverHTML(b, 'xs')}<h3 class="h3">Porque você leu ${esc(b.title)}</h3></div>
+      ${S.busy[b.id] ? loadingHTML() : recsHTML(b.recs, b.id, '')}
     </section>`).join('');
   const pending = without.length
-    ? `<div class="panel" style="margin-bottom:24px"><h3>Lidos que ainda não geraram sugestão</h3><div class="chips">${without.map((b) => `<button type="button" class="chip" data-action="open-book" data-id="${b.id}" data-tab="sugestao">${esc(b.title)}</button>`).join('')}</div></div>`
+    ? `<section class="block"><h3 class="h3">Lidos sem sugestão ainda</h3><div class="pill-row">${without.map((b) => `<button type="button" class="pill" data-action="open-book" data-id="${b.id}" data-tab="sugestao">${esc(b.title)}</button>`).join('')}</div></section>`
     : '';
   const empty = !done.length && !S.settings.generalRecs && !S.busy.geral
-    ? '<div class="empty"><h3>As sugestões nascem dos seus resumos</h3><p>Conclua um livro com resumo e nota para receber recomendações baseadas nele. Ou peça uma sugestão olhando a estante toda.</p></div>'
+    ? '<p class="lead-empty">Quando você terminar um livro e escrever o resumo, as sugestões aparecem aqui. Dá pra pedir uma olhando a estante toda no botão lá em cima.</p>'
     : '';
-  return `<div class="page-head"><div><span class="eyebrow">Descobrir</span><h1>Próximas <em>leituras</em></h1></div></div>${keyBanner}${hero}${general}${pending}${per}${empty}`;
+  return `${top}${general}${pending}${per}${empty}`;
 }
 
-/* ================= LEITOR ================= */
+/* ================= PERFIL ================= */
 function viewLeitor() {
   const books = allBooks();
   const done = books.filter((b) => b.status === 'concluido');
@@ -850,53 +955,59 @@ function viewLeitor() {
   const durs = done.filter((b) => b.startDate && b.endDate).map((b) => daysBetween(b.startDate, b.endDate) + 1);
   const avgDur = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : null;
   const { best } = streaks(dayTotals());
-  const name = readerName();
+  const since = books.length ? Math.min(...books.map((b) => b.addedAt || Date.now())) : Date.now();
   const p = S.settings.profile;
 
+  const head = `<header class="profile">
+    <label class="avatar-edit" title="Trocar foto">${avatarHTML('lg')}<span class="cam">${ICON.camera}</span><input type="file" accept="image/*" data-change="photo-file" hidden></label>
+    <div class="profile-id">
+      <input id="name-input" class="name-input" value="${esc(readerName())}" placeholder="Seu nome" data-change="name-change" aria-label="Seu nome" maxlength="40">
+      <p class="small muted">${S.user ? esc(S.user.email) : ''}${S.user ? ' · ' : ''}na estante desde ${new Date(since).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
+      <div class="row">
+        <label class="btn btn-sm btn-ghost">${ICON.camera}<span>${S.settings.photo ? 'Trocar foto' : 'Pôr uma foto'}</span><input type="file" accept="image/*" data-change="photo-file" hidden></label>
+        ${S.settings.photo ? '<button type="button" class="link" data-action="photo-remove">tirar foto</button>' : ''}
+      </div>
+    </div>
+  </header>`;
+
+  const nums = `<dl class="numbers wide">
+    <div><dt>lidos</dt><dd>${done.length}</dd><span class="small muted">${doneYear.length} em ${year}</span></div>
+    <div><dt>páginas</dt><dd>${pagesRead.toLocaleString('pt-BR')}</dd></div>
+    <div><dt>nota média</dt><dd>${avg}</dd></div>
+    <div><dt>recorde</dt><dd>${best}<small> dias</small></dd></div>
+    <div><dt>por livro</dt><dd>${avgDur ?? '—'}<small>${avgDur ? ' dias' : ''}</small></dd></div>
+  </dl>`;
+
   let perfil;
-  if (S.busy.profile) perfil = loadingHTML('Lendo sua estante…');
+  if (S.busy.profile) perfil = loadingHTML('Lendo seus resumos');
   else if (p && p.perfil) {
     perfil = `<p class="perfil">${esc(p.perfil)}</p>
-      ${p.tags && p.tags.length ? `<div class="taglist">${p.tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
-      ${(p.gosta && p.gosta.length) || (p.evita && p.evita.length) ? `<div class="likes"><div><h4>Costuma gostar</h4><ul>${(p.gosta || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div><div><h4>Costuma evitar</h4><ul>${(p.evita || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></div>` : ''}
-      ${p.proximo ? `<p class="muted" style="font-style:italic">${esc(p.proximo)}</p>` : ''}
-      <button type="button" class="btn btn-sm btn-ghost" data-action="profile-refresh">${ICON.refresh}<span>Atualizar perfil</span></button>`;
+      ${p.tags && p.tags.length ? `<div class="pill-row">${p.tags.map((t) => `<span class="pill static">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${(p.gosta && p.gosta.length) || (p.evita && p.evita.length) ? `<div class="likes"><div><h4 class="h4">Costuma gostar</h4><ul>${(p.gosta || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div><div><h4 class="h4">Costuma evitar</h4><ul>${(p.evita || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></div>` : ''}
+      ${p.proximo ? `<p class="muted">${esc(p.proximo)}</p>` : ''}
+      <button type="button" class="link" data-action="profile-refresh">${ICON.refresh}<span>reescrever</span></button>`;
   } else if (!done.length) {
-    perfil = '<p class="perfil">Seu perfil de leitor aparece aqui depois do primeiro livro arquivado com resumo.</p>';
+    perfil = '<p class="muted">Aparece depois do primeiro livro com resumo.</p>';
   } else if (!S.settings.geminiKey) {
-    perfil = '<p class="perfil">Ative a IA gratuita ao lado e eu escrevo seu perfil de leitor a partir dos seus resumos.</p>';
+    perfil = '<p class="muted">Precisa da IA ligada (lá embaixo, em Ajustes).</p>';
   } else {
-    perfil = '<button type="button" class="btn btn-leather" data-action="profile-refresh">Escrever meu perfil de leitor</button>';
+    perfil = '<button type="button" class="btn btn-ink" data-action="profile-refresh">Escrever meu perfil de leitor</button>';
   }
-
-  const plate = `<div class="bookplate">
-    <svg class="orn" viewBox="0 0 140 24" aria-hidden="true"><path d="M2 12h44M94 12h44M50 12c6-10 14-10 20 0 6 10 14 10 20 0M50 12c6 10 14 10 20 0 6-10 14-10 20 0"/><circle cx="70" cy="12" r="2.4" style="fill:currentColor"/></svg>
-    <span class="exl">Ex Libris</span>
-    <span class="who">${esc(name || 'do leitor')}</span>
-    ${perfil}
-  </div>`;
-
-  const stats = `<div class="stats-grid">
-    <div class="stat"><span class="k">Lidos</span><span class="v">${done.length}</span><span class="muted" style="font-size:.86rem">${doneYear.length} em ${year}</span></div>
-    <div class="stat"><span class="k">Páginas</span><span class="v">${pagesRead.toLocaleString('pt-BR')}</span></div>
-    <div class="stat"><span class="k">Nota média</span><span class="v">${avg}</span></div>
-    <div class="stat"><span class="k">Recorde</span><span class="v">${best}<small> dias</small></span></div>
-    <div class="stat"><span class="k">Por livro</span><span class="v">${avgDur ?? '—'}<small>${avgDur ? ' dias' : ''}</small></span></div>
-  </div>`;
 
   const gcount = {};
   done.forEach((b) => { const g = b.genre || 'Sem gênero'; gcount[g] = (gcount[g] || 0) + 1; });
   const grows = Object.entries(gcount).sort((a, b) => b[1] - a[1]).slice(0, 7);
   const gmax = grows.length ? grows[0][1] : 1;
   const genres = grows.length
-    ? `<div class="panel"><h3>Gêneros mais lidos</h3><div class="genre-bars">${grows.map(([g, n]) => `<div class="bm-row"><span>${esc(g)}</span><span class="n">${n}</span><span class="bar"><i style="width:${Math.round((n / gmax) * 100)}%"></i></span></div>`).join('')}</div></div>`
+    ? `<div><h3 class="h3">Gêneros</h3><div class="bars">${grows.map(([g, n]) => `<div class="bar-row"><span class="bl">${esc(g)}</span><span class="bn">${n}</span><span class="bt"><i style="width:${Math.round((n / gmax) * 100)}%"></i></span></div>`).join('')}</div></div>`
     : '';
 
-  return `<div class="page-head"><div><span class="eyebrow">Leitor</span><h1>Seu <em>ex-libris</em></h1><p class="lede">Quem você é como leitor, em números e em palavras. E os ajustes da casa.</p></div></div>
-    <div class="leitor-grid">
-      <div class="side-stack">${plate}${stats}<div class="panel"><h3>Livros terminados em ${year}</h3><div class="chart-wrap">${monthChart(done, year)}</div></div>${genres}</div>
-      <div class="side-stack">${settingsHTML()}</div>
-    </div>`;
+  return `${head}${nums}
+    <div class="two-col">
+      <section class="block"><h2 class="h2">Que leitor você é</h2>${perfil}</section>
+      <section class="block"><h2 class="h2">Terminados em ${year}</h2><div class="chart">${monthChart(done, year)}</div>${genres}</section>
+    </div>
+    ${settingsHTML()}`;
 }
 
 function monthChart(done, year) {
@@ -904,63 +1015,54 @@ function monthChart(done, year) {
   done.forEach((b) => { if ((b.endDate || '').startsWith(year)) counts[Number(b.endDate.slice(5, 7)) - 1]++; });
   const max = Math.max(1, ...counts);
   const W = 360;
-  const H = 150;
+  const H = 140;
   const top = 18;
-  const bottom = 22;
+  const bottom = 20;
   const bw = (W - 24) / 12;
   const bars = counts.map((c, i) => {
     const h = Math.round(((H - top - bottom) * c) / max);
-    const x = 12 + i * bw + 4;
+    const x = 12 + i * bw + 5;
     const y = H - bottom - h;
-    return `${c ? `<rect x="${x}" y="${y}" width="${bw - 8}" height="${h}" rx="2" style="fill:var(--leather)"/><text x="${x + (bw - 8) / 2}" y="${y - 5}" text-anchor="middle" style="fill:var(--ink);font:700 11px var(--f-type)">${c}</text>` : `<rect x="${x}" y="${H - bottom - 2}" width="${bw - 8}" height="2" style="fill:var(--rule)"/>`}<text x="${x + (bw - 8) / 2}" y="${H - 6}" text-anchor="middle" style="fill:var(--ink-soft);font:11px var(--f-type)">${MONTHS_SHORT[i]}</text>`;
+    return `${c ? `<rect x="${x}" y="${y}" width="${bw - 10}" height="${h}" class="c-bar"/><text x="${x + (bw - 10) / 2}" y="${y - 5}" text-anchor="middle" class="c-val">${c}</text>` : ''}<text x="${x + (bw - 10) / 2}" y="${H - 5}" text-anchor="middle" class="c-lbl">${MONTHS_SHORT[i].charAt(0)}</text>`;
   }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Livros terminados por mês em ${year}" style="stroke:none"><line x1="12" x2="${W - 12}" y1="${H - bottom}" y2="${H - bottom}" style="stroke:var(--rule)"/>${bars}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Livros terminados por mês em ${year}"><line x1="12" x2="${W - 12}" y1="${H - bottom}" y2="${H - bottom}" class="c-axis"/>${bars}</svg>`;
 }
 
 function settingsHTML() {
   const s = S.settings;
   const ks = S.keyStatus;
   const keyState = ks && ks.state === 'testing'
-    ? '<p class="muted" style="font-style:italic">Testando a chave…</p>'
+    ? '<p class="muted">Testando a chave…</p>'
     : ks && ks.state === 'err'
       ? `<p class="err">${esc(ks.msg)}</p>`
       : s.geminiKey
-        ? `<p class="ok-line">IA ativa${s.model ? ` (${esc(s.model)})` : ''}. As sugestões e o seu perfil já usam ela.</p>`
+        ? `<p class="ok">IA ligada${s.model ? ` (${esc(s.model)})` : ''}.</p>`
         : '';
   const sync = !cloudAvailable
-    ? '<p>Por enquanto, a estante fica salva só neste navegador. A sincronização entre celular e computador entra assim que o Firebase for configurado (veja o LEIA-ME). Até lá, exporte um backup de vez em quando.</p>'
-    : S.user
-      ? `<p>Conectado como <b>${esc(S.user.email || S.user.name)}</b>. Tudo que você faz aqui aparece no celular e no computador.</p><button type="button" class="btn btn-sm btn-ghost" data-action="logout">Sair da conta</button>`
-      : '<p>Entre com sua conta Google para usar a mesma estante no celular e no computador. O que já está neste aparelho vai junto.</p><button type="button" class="btn btn-sm btn-ink" data-action="login">Entrar com Google</button>';
+    ? '<p>Os dados ficam só neste navegador. Baixe um backup de vez em quando.</p>'
+    : `<p>Conectado como <b>${esc(S.user ? (S.user.email || S.user.name) : '')}</b>. O que você muda aqui aparece no celular e no computador.</p><button type="button" class="btn btn-sm btn-ghost" data-action="logout">Sair da conta</button>`;
   const theme = readPref('theme', 'auto');
-  return `<div class="panel settings-list">
-    <h3>Ajustes da casa</h3>
-    <div class="setting"><h4>Seu nome no ex-libris</h4>
-      <form class="key-row" data-submit="save-name"><input id="set-name" value="${esc(s.readerName || '')}" placeholder="${esc((S.user && S.user.name) || 'Como quer ser chamado')}" aria-label="Seu nome"><button class="btn btn-sm btn-ink" type="submit">Salvar</button></form>
+  return `<section class="block settings">
+    <h2 class="h2">Ajustes</h2>
+    <div class="set"><h3 class="h4">Meta diária</h3>
+      <div class="stepper"><button type="button" data-action="goal" data-d="-5" aria-label="Diminuir meta">−</button><span>${s.goal || 20} páginas</span><button type="button" data-action="goal" data-d="5" aria-label="Aumentar meta">+</button></div>
     </div>
-    <div class="setting"><h4>Meta diária de leitura</h4>
-      <div class="goal-ctl"><button type="button" data-action="goal" data-d="-5" aria-label="Diminuir meta">−</button><span class="type" style="font-size:1.3rem">${s.goal || 20} páginas</span><button type="button" data-action="goal" data-d="5" aria-label="Aumentar meta">+</button></div>
-    </div>
-    <div class="setting"><h4>IA gratuita (Gemini, do Google)</h4>
-      <p>É ela que lê seus resumos e escolhe o próximo livro. O plano gratuito do Google não pede cartão.</p>
-      ${s.geminiKey ? '' : `<ol>
-        <li>Abra <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e entre com sua conta Google.</li>
-        <li>Toque em <b>Create API key</b> (Criar chave de API).</li>
-        <li>Copie a chave e cole aqui embaixo.</li>
-      </ol>`}
-      <form class="key-row" data-submit="save-key"><input id="set-key" type="password" autocomplete="off" placeholder="${s.geminiKey ? 'chave salva: cole outra para trocar' : 'cole a chave aqui'}" aria-label="Chave da IA"><button class="btn btn-sm btn-ink" type="submit" ${ks && ks.state === 'testing' ? 'disabled' : ''}>Salvar e testar</button>${s.geminiKey ? '<button type="button" class="btn btn-sm btn-danger" data-action="remove-key">Remover</button>' : ''}</form>
+    <div class="set"><h3 class="h4">IA (Gemini, do Google)</h3>
+      <p>É ela que lê seus resumos e escolhe o próximo livro. O plano gratuito não pede cartão.</p>
+      ${s.geminiKey ? '' : '<p class="small muted">Pegue a chave em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (botão “Create API key”) e cole aqui.</p>'}
+      <form class="form inline" data-submit="save-key"><input id="set-key" type="password" autocomplete="off" placeholder="${s.geminiKey ? 'cole outra chave pra trocar' : 'cole a chave aqui'}" aria-label="Chave da IA"><button class="btn btn-sm btn-ink" type="submit" ${ks && ks.state === 'testing' ? 'disabled' : ''}>Salvar e testar</button>${s.geminiKey ? '<button type="button" class="btn btn-sm btn-ghost danger" data-action="remove-key">Remover</button>' : ''}</form>
       ${keyState}
-      <p style="font-size:.86rem;margin-top:6px">A chave fica guardada ${cloudAvailable ? 'no seu espaço privado da nuvem, que só a sua conta acessa' : 'só neste navegador'}. Ela nunca vai para o código do site.</p>
+      <p class="small muted">A chave fica ${cloudAvailable ? 'na sua conta, que só você acessa' : 'só neste navegador'}. Ela não vai pro código do site.</p>
     </div>
-    <div class="setting"><h4>Sincronização</h4>${sync}</div>
-    <div class="setting"><h4>Aparência</h4>
-      <div class="seg" role="group" aria-label="Tema">${[['auto', 'Automático'], ['light', 'Dia no sebo'], ['dark', 'Noite no sebo']].map(([k, l]) => `<button type="button" class="${theme === k ? 'on' : ''}" data-action="theme" data-t="${k}">${l}</button>`).join('')}</div>
+    <div class="set"><h3 class="h4">Conta</h3>${sync}</div>
+    <div class="set"><h3 class="h4">Tema</h3>
+      <div class="status-switch">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => `<button type="button" class="${theme === k ? 'on' : ''}" data-action="theme" data-t="${k}">${l}</button>`).join('')}</div>
     </div>
-    <div class="setting"><h4>Backup</h4>
-      <p>Uma cópia de todos os livros, resumos e registros num arquivo.</p>
-      <div class="actions"><button type="button" class="btn btn-sm btn-ghost" data-action="export">Baixar backup</button><label class="btn btn-sm btn-ghost">Restaurar backup<input type="file" accept="application/json,.json" data-change="import" hidden></label></div>
+    <div class="set"><h3 class="h4">Backup</h3>
+      <p>Um arquivo com todos os livros, resumos e registros.</p>
+      <div class="row"><button type="button" class="btn btn-sm btn-ghost" data-action="export">Baixar backup</button><label class="btn btn-sm btn-ghost">Restaurar backup<input type="file" accept="application/json,.json" data-change="import" hidden></label></div>
     </div>
-  </div>`;
+  </section>`;
 }
 
 function maybeAutoProfile() {
@@ -983,7 +1085,7 @@ async function requestRecs(owner) {
     const payload = { at: Date.now(), source: res.source, note: res.note || '', items: res.items.map((i) => ({ ...i, state: 'novo' })) };
     if (owner === 'geral') store.saveSettings({ generalRecs: payload });
     else if (S.books[owner]) store.saveBook({ ...S.books[owner], recs: payload });
-    if (!res.items.length) toast('Não encontrei sugestões agora. Tente de novo em instantes.');
+    if (!res.items.length) toast('Não achei sugestões agora. Tente de novo daqui a pouco.');
   } catch (e) {
     toast(`Não consegui buscar sugestões: ${e.message}`);
   } finally {
@@ -1056,9 +1158,9 @@ function hasBook(title, author) {
 }
 
 async function refreshProfile() {
-  if (!S.settings.geminiKey) { toast('Ative a IA para eu escrever seu perfil.'); return; }
+  if (!S.settings.geminiKey) { toast('Ligue a IA pra eu escrever seu perfil.'); return; }
   const done = allBooks().filter((b) => b.status === 'concluido').length;
-  if (!done) { toast('Arquive pelo menos um livro com resumo primeiro.'); return; }
+  if (!done) { toast('Termine pelo menos um livro com resumo primeiro.'); return; }
   S.busy.profile = true;
   renderView();
   try {
@@ -1072,23 +1174,29 @@ async function refreshProfile() {
   }
 }
 
+// Carimbo de biblioteca quando um livro vira "lido"
 function celebrate(title) {
   const el = document.createElement('div');
-  el.className = 'celebrate';
-  el.innerHTML = `<div class="wax"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="${WAX_PATH}" style="fill:#8f2a36"/><circle cx="32" cy="32" r="19" style="fill:none;stroke:#f0d9a2;stroke-width:1.2;opacity:.7"/><text x="32" y="36.5" text-anchor="middle" style="fill:#f3dfae;font:italic 12px 'IM Fell English', Georgia, serif;letter-spacing:.5px">Lido</text></svg><p>“${esc(title)}” entrou para os lidos</p></div>`;
+  el.className = 'stamp-overlay';
+  const d = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
+  el.innerHTML = `<div class="stamp"><span class="stamp-big">lido</span><span class="stamp-date">${esc(d)}</span></div><p>${esc(title)}</p>`;
   document.body.appendChild(el);
-  setTimeout(() => el.classList.add('out'), 1700);
-  setTimeout(() => el.remove(), 2250);
+  setTimeout(() => el.classList.add('out'), 1600);
+  setTimeout(() => el.remove(), 2100);
 }
 
 function toast(msg, action) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<p>${esc(msg)}</p>${action ? `<button type="button" class="btn btn-sm">${esc(action.label)}</button>` : ''}`;
+  el.innerHTML = `<p>${esc(msg)}</p>${action ? `<button type="button">${esc(action.label)}</button>` : ''}`;
   const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
   if (action) el.querySelector('button').addEventListener('click', () => { kill(); action.run(); });
   $('#toasts').appendChild(el);
-  setTimeout(kill, action ? 7000 : 3800);
+  setTimeout(kill, action ? 7000 : 3600);
+}
+
+function askLogin() {
+  toast('Entre com sua conta pra mexer na estante.', { label: 'Entrar', run: () => ACTIONS.login() });
 }
 
 function applyTheme(t) {
@@ -1114,11 +1222,24 @@ function saveLogEntry({ bookId, date, pages }) {
   S.cal.sel = date;
   const finished = b.pages && pagesRead >= b.pages;
   if (finished) {
-    toast(`Você chegou à última página de “${b.title}”. Escreva o resumo para arquivar.`, { label: 'Escrever', run: () => openBook(bookId, 'resumo') });
+    toast(`Última página de “${b.title}”. Agora é o resumo.`, { label: 'Escrever', run: () => openBook(bookId, 'resumo') });
   } else {
-    toast(`+${pages} páginas carimbadas${dayTotal >= goal ? '. Meta do dia cumprida!' : '.'}`);
+    toast(`+${pages} páginas${dayTotal >= goal ? '. Meta do dia batida.' : '.'}`);
   }
   renderView();
+}
+
+// Página escolhida no controle deslizante do "Lendo agora"
+function commitPage(id, page) {
+  const b = S.books[id];
+  if (!b) return;
+  const target = b.pages ? Math.min(page, b.pages) : page;
+  const diff = target - (b.pagesRead || 0);
+  if (diff > 0) saveLogEntry({ bookId: id, date: today(), pages: diff });
+  else if (diff < 0) {
+    store.saveBook({ ...b, pagesRead: target, updatedAt: Date.now() });
+    toast(`Voltou pra página ${target}.`);
+  }
 }
 
 const ACTIONS = {
@@ -1128,9 +1249,9 @@ const ACTIONS = {
   go: (el) => { location.hash = el.dataset.to; },
   'add-book': () => openAdd(),
   login: async () => {
-    try { await store.signIn(); } catch (e) { toast(`Não foi possível entrar: ${e.message}`); }
+    try { await store.signIn(); } catch (e) { toast(`Não deu pra entrar: ${e.message}`); }
   },
-  logout: async () => { await store.signOut(); toast('Você saiu da conta.'); },
+  logout: async () => { await store.signOut(); location.hash = 'estante'; toast('Você saiu da conta.'); },
 
   /* estante */
   filter: (el) => { S.filter = el.dataset.f; renderView(); },
@@ -1147,20 +1268,26 @@ const ACTIONS = {
     renderModal();
     maybeAutoRecs();
   },
+  'status-set': (el) => {
+    const b = S.books[S.modal.id];
+    const to = el.dataset.s;
+    const t = Date.now();
+    if (to === 'quero' && b.status !== 'quero') {
+      store.saveBook({ ...b, status: 'quero', updatedAt: t });
+      S.modal.tab = 'ficha';
+    } else if (to === 'lendo' && b.status !== 'lendo') {
+      store.saveBook({ ...b, status: 'lendo', startDate: b.startDate || today(), updatedAt: t });
+      S.modal.tab = 'progresso';
+      toast(`“${b.title}” foi pra Lendo agora.`);
+    } else if (to === 'lido' && b.status !== 'concluido' && b.status !== 'resumo') {
+      store.saveBook({ ...b, status: 'resumo', pagesRead: b.pages || b.pagesRead || 0, updatedAt: t });
+      S.modal.tab = 'resumo';
+    } else return;
+    S.modal.form = null;
+    S.modal.editing = false;
+    renderModal();
+  },
   'toggle-syn': () => { S.modal.synOpen = !S.modal.synOpen; renderModal(); },
-  'start-reading': () => {
-    const b = S.books[S.modal.id];
-    store.saveBook({ ...b, status: 'lendo', startDate: b.startDate || today(), updatedAt: Date.now() });
-    S.modal.tab = 'progresso';
-    renderModal();
-    toast(`“${b.title}” foi para a mesa de leitura.`);
-  },
-  'back-to-quero': () => {
-    const b = S.books[S.modal.id];
-    store.saveBook({ ...b, status: 'quero', updatedAt: Date.now() });
-    S.modal.tab = 'ficha';
-    renderModal();
-  },
   'ask-delete': () => { S.modal.confirmDelete = true; renderModal(); },
   'cancel-delete': () => { S.modal.confirmDelete = false; renderModal(); },
   'confirm-delete': () => {
@@ -1187,7 +1314,7 @@ const ACTIONS = {
     });
     S.modal.editing = false;
     renderModal();
-    toast('Ficha atualizada.');
+    toast('Salvo.');
   },
   'pick-cover': (el) => {
     const b = S.books[S.modal.id];
@@ -1205,7 +1332,7 @@ const ACTIONS = {
       const found = res.flatMap((r) => r.covers);
       const alts = [...new Set([...(b.coverAlts || []), ...found])].filter((c) => c !== b.cover).slice(0, 16);
       store.saveBook({ ...S.books[b.id], coverAlts: alts });
-      if (!found.length) toast('Não achei outras capas para esse título.');
+      if (!found.length) toast('Não achei outras capas pra esse título.');
     } catch (e) {
       toast(e.message);
     } finally {
@@ -1216,17 +1343,10 @@ const ACTIONS = {
 
   /* progresso */
   'quick-page': () => {
-    const b = S.books[S.modal.id];
-    const page = Number($('#pp-page').value);
-    if (!$('#pp-page').value || Number.isNaN(page) || page < 0) return;
-    const target = b.pages ? Math.min(page, b.pages) : page;
-    const diff = target - (b.pagesRead || 0);
-    if (diff > 0) {
-      saveLogEntry({ bookId: b.id, date: today(), pages: diff });
-    } else if (diff < 0) {
-      store.saveBook({ ...b, pagesRead: target, updatedAt: Date.now() });
-      toast(`Progresso corrigido para a página ${target}.`);
-    }
+    const v = $('#pp-page').value;
+    const page = Number(v);
+    if (!v || Number.isNaN(page) || page < 0) return;
+    commitPage(S.modal.id, page);
     renderModal();
   },
   'set-total': () => {
@@ -1260,9 +1380,9 @@ const ACTIONS = {
     const f = m.form;
     const b = S.books[m.id];
     const fail = (msg) => { f.error = msg; renderModal(); };
-    if (!f.rating) return fail('Dê uma nota de 1 a 5 estrelas.');
-    if (f.summary.trim().length < MIN_SUMMARY) return fail(`Escreva pelo menos umas duas frases (${MIN_SUMMARY} caracteres). Não precisa caprichar.`);
-    if (f.start && f.end && f.start > f.end) return fail('A data de início está depois da data de término.');
+    if (!f.rating) return fail('Dê uma nota de 1 a 5.');
+    if (f.summary.trim().length < MIN_SUMMARY) return fail(`Escreva pelo menos ${MIN_SUMMARY} caracteres. Duas frases bastam.`);
+    if (f.start && f.end && f.start > f.end) return fail('A data de início está depois da de término.');
     const wasDone = b.status === 'concluido';
     store.saveBook({
       ...b,
@@ -1280,7 +1400,7 @@ const ACTIONS = {
     if (wasDone) {
       m.tab = 'resumo';
       renderModal();
-      toast('Resumo atualizado.');
+      toast('Resumo salvo.');
     } else {
       celebrate(b.title);
       m.tab = 'sugestao';
@@ -1297,7 +1417,7 @@ const ACTIONS = {
     const it = recRef(owner).items[i];
     if (!hasBook(it.title, it.author)) store.saveBook(bookFromRec(it, 'quero'));
     setRecState(owner, i, 'quero');
-    toast(`“${it.title}” foi para Quero ler.`);
+    toast(`“${it.title}” foi pra Quero ler.`);
     rerenderAll();
   },
   'rec-read': (el) => {
@@ -1320,12 +1440,13 @@ const ACTIONS = {
     rerenderAll();
   },
 
-  /* catalogar */
+  /* adicionar */
   'add-search': async () => {
     const m = S.modal;
     const title = (m.title || '').trim();
     const author = (m.author || '').trim();
     if (!title && !author) { m.error = 'Digite pelo menos o título.'; renderModal(); return; }
+    m.q = `${title}|${author}`;
     m.loading = true;
     m.error = '';
     m.results = null;
@@ -1391,7 +1512,6 @@ const ACTIONS = {
     store.saveBook(b);
     if (status === 'resumo') {
       openBook(b.id, 'resumo');
-      toast('Agora o resumo: é ele que arquiva o livro como lido.');
     } else {
       closeModal();
       toast(`“${b.title}” entrou em ${STATUS[status]}.`);
@@ -1438,9 +1558,26 @@ const ACTIONS = {
     if (cap) cap.textContent = `${fmtDate(el.dataset.d, { weekday: 'long', day: 'numeric', month: 'long' })}: ${plural(Number(el.dataset.p), 'página', 'páginas')}`;
   },
 
-  /* leitor */
+  /* perfil */
   'profile-refresh': () => refreshProfile(),
-  'save-name': () => { store.saveSettings({ readerName: $('#set-name').value.trim() }); toast('Nome salvo no ex-libris.'); },
+  'name-change': (el) => {
+    const v = el.value.trim();
+    if (v === (S.settings.readerName || '')) return;
+    store.saveSettings({ readerName: v });
+    toast('Nome salvo.');
+  },
+  'photo-file': (el) => {
+    const file = el.files && el.files[0];
+    el.value = '';
+    openPhoto(file);
+  },
+  'photo-save': () => {
+    const data = exportCrop();
+    closeModal();
+    store.saveSettings({ photo: data });
+    toast('Foto salva.');
+  },
+  'photo-remove': () => { store.saveSettings({ photo: '' }); toast('Foto removida.'); },
   'save-key': async () => {
     const v = $('#set-key').value.trim();
     if (!v) return;
@@ -1451,7 +1588,7 @@ const ACTIONS = {
       store.saveSettings({ geminiKey: v, model });
       S.keyStatus = null;
       S.profileTried = false;
-      toast('IA ativada. Daqui pra frente ela escolhe suas sugestões.');
+      toast('IA ligada.');
     } catch (e) {
       S.keyStatus = { state: 'err', msg: e.message };
     }
@@ -1508,14 +1645,17 @@ document.addEventListener('submit', (e) => {
 
 document.addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.bind && S.modal) setPath(S.modal, t.dataset.bind, t.value);
+  if (t.dataset.bind && S.modal) {
+    setPath(S.modal, t.dataset.bind, t.value);
+    if (t.dataset.live) liveSearch();
+  }
   if (t.dataset.form && S.modal && S.modal.form) {
     S.modal.form[t.dataset.form] = t.value;
     if (t.dataset.form === 'summary') {
       const c = $('#sum-counter');
       const n = t.value.trim().length;
       if (c) {
-        c.textContent = n >= MIN_SUMMARY ? 'pronto para arquivar' : `${n}/${MIN_SUMMARY} caracteres`;
+        c.textContent = n >= MIN_SUMMARY ? 'pode salvar' : `${n}/${MIN_SUMMARY}`;
         c.classList.toggle('ok', n >= MIN_SUMMARY);
       }
     }
@@ -1525,50 +1665,86 @@ document.addEventListener('input', (e) => {
     const box = $('#shelves');
     if (box) box.innerHTML = shelvesHTML();
   }
+  if (t.dataset.range) {
+    const out = document.getElementById(`pg-${t.dataset.range}`);
+    if (out) out.textContent = t.value;
+    t.closest('.page-slider').style.setProperty('--p', `${(t.value / t.max) * 100}%`);
+  }
+  if (t.dataset.cropZoom !== undefined && S.modal && S.modal.type === 'photo') {
+    S.modal.zoom = Number(t.value);
+    applyCrop();
+  }
 });
 
 document.addEventListener('change', (e) => {
   const t = e.target;
+  if (t.dataset.range) { commitPage(t.dataset.range, Number(t.value)); return; }
   if (t.dataset.change && ACTIONS[t.dataset.change]) ACTIONS[t.dataset.change](t, e);
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && S.modal) { closeModal(); return; }
+  if (e.key === 'Enter' && e.target.id === 'name-input') { e.target.blur(); return; }
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"][data-action]')) {
     e.preventDefault();
     e.target.click();
   }
+  // atalho N para adicionar livro, fora de campos de texto
+  if ((e.key === 'n' || e.key === 'N') && !S.modal && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.matches('input, textarea, select')) {
+    e.preventDefault();
+    openAdd();
+  }
 });
 
-// Capa inclinando com o mouse (só em telas com ponteiro fino)
-if (window.matchMedia('(pointer: fine)').matches) {
-  document.addEventListener('pointermove', (e) => {
-    const el = e.target.closest('[data-tilt]');
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width - 0.5;
-    const y = (e.clientY - r.top) / r.height - 0.5;
-    el.style.setProperty('--ry', `${(x * 16).toFixed(1)}deg`);
-    el.style.setProperty('--rx', `${(-y * 12).toFixed(1)}deg`);
-  });
-  document.addEventListener('pointerout', (e) => {
-    const el = e.target.closest && e.target.closest('[data-tilt]');
-    if (el && !el.contains(e.relatedTarget)) { el.style.setProperty('--ry', '0deg'); el.style.setProperty('--rx', '0deg'); }
-  });
-}
+// Enquadrar a foto arrastando
+let drag = null;
+document.addEventListener('pointerdown', (e) => {
+  const crop = e.target.closest('#crop');
+  if (!crop || !S.modal || S.modal.type !== 'photo') return;
+  drag = { x: e.clientX, y: e.clientY, ox: S.modal.x, oy: S.modal.y };
+  crop.setPointerCapture(e.pointerId);
+  crop.classList.add('grabbing');
+});
+document.addEventListener('pointermove', (e) => {
+  if (drag && S.modal && S.modal.type === 'photo') {
+    S.modal.x = drag.ox + (e.clientX - drag.x);
+    S.modal.y = drag.oy + (e.clientY - drag.y);
+    applyCrop();
+    return;
+  }
+  // capa inclinando com o mouse
+  if (e.pointerType !== 'mouse') return;
+  const el = e.target.closest('[data-tilt]');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width - 0.5;
+  const y = (e.clientY - r.top) / r.height - 0.5;
+  el.style.setProperty('--ry', `${(x * 18).toFixed(1)}deg`);
+  el.style.setProperty('--rx', `${(-y * 12).toFixed(1)}deg`);
+});
+document.addEventListener('pointerup', () => {
+  if (!drag) return;
+  drag = null;
+  const c = $('#crop');
+  if (c) c.classList.remove('grabbing');
+});
+document.addEventListener('pointerout', (e) => {
+  const el = e.target.closest && e.target.closest('[data-tilt]');
+  if (el && !el.contains(e.relatedTarget)) { el.style.setProperty('--ry', '0deg'); el.style.setProperty('--rx', '0deg'); }
+});
+document.addEventListener('wheel', (e) => {
+  if (!S.modal || S.modal.type !== 'photo' || !e.target.closest('#crop')) return;
+  e.preventDefault();
+  S.modal.zoom = Math.max(1, Math.min(3, S.modal.zoom - e.deltaY * 0.002));
+  const z = $('[data-crop-zoom]');
+  if (z) z.value = S.modal.zoom;
+  applyCrop();
+}, { passive: false });
 
-let lastPerRow = perRow();
-let resizeT;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeT);
-  resizeT = setTimeout(() => {
-    const n = perRow();
-    if (n !== lastPerRow && S.view === 'estante') {
-      lastPerRow = n;
-      const box = $('#shelves');
-      if (box) box.innerHTML = shelvesHTML();
-    }
-  }, 150);
+// No mapa do ano, passar o dedo também mostra o dia
+document.addEventListener('pointerover', (e) => {
+  const el = e.target.closest && e.target.closest('.heat i[data-d]');
+  if (el) ACTIONS.heat(el);
 });
 
 window.addEventListener('hashchange', route);
