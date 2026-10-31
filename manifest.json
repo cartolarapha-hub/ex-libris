@@ -1,0 +1,13 @@
+{
+  "name": "Ex Libris — biblioteca particular",
+  "short_name": "Ex Libris",
+  "lang": "pt-BR",
+  "start_url": "./#estante",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#2a1a0f",
+  "theme_color": "#2a1a0f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

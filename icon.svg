@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#2a1a0f"/>
+  <path d="M256 54c32 24 56 8 80 32s16 48 48 64 48 24 48 64-24 40-16 72 24 48 0 80-48 24-64 48-24 56-64 56-48-24-72-24-48 24-80 8-24-48-48-64-48-24-48-64 24-48 16-80-24-48 0-80 48-24 64-48 24-48 72-48 32 0 64-16z" fill="#8f2a36"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#e2bb6c" stroke-width="10" opacity=".8"/>
+  <text x="256" y="308" text-anchor="middle" font-family="Georgia, serif" font-size="150" font-style="italic" fill="#f3dfae">EL</text>
+</svg>
